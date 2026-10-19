@@ -1,0 +1,65 @@
+name: evotechnology
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evotech
+      POSTGRES_PASSWORD: evotech
+      POSTGRES_DB: evotech
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evotech -d evotech"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  # Полный запуск приложения в контейнере: docker compose --profile app up --build
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      target: app
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://evotech:evotech@db:5432/evotech?schema=public
+      SMTP_HOST: mailpit
+      STORAGE_DIR: /app/storage
+    ports:
+      - "3000:3000"
+    volumes:
+      - files:/app/storage
+
+  worker:
+    profiles: ["app"]
+    build:
+      context: .
+      target: worker
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://evotech:evotech@db:5432/evotech?schema=public
+      SMTP_HOST: mailpit
+      STORAGE_DIR: /app/storage
+    volumes:
+      - files:/app/storage
+
+volumes:
+  pgdata:
+  files:

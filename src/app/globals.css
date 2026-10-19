@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/* Дизайн-токены EvoTechnology: светлый нейтральный фон, графит и сталь,
+   холодный синий акцент; контрастный оранжевый — только для важных действий. */
+@theme {
+  --font-sans: var(--font-plex), "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --color-bg: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-ink: #16202a;
+  --color-ink-soft: #2c3a47;
+  --color-muted: #566370;
+  --color-line: #dce2e8;
+  --color-line-strong: #c3ccd5;
+
+  --color-steel-50: #f2f5f8;
+  --color-steel-100: #e4e9ef;
+  --color-steel-200: #c9d3dd;
+  --color-steel-400: #8696a6;
+  --color-steel-600: #4c5b6a;
+  --color-steel-800: #26323e;
+  --color-steel-900: #18212b;
+
+  --color-accent-50: #eaf2fb;
+  --color-accent-100: #d2e3f5;
+  --color-accent-500: #2a6fbf;
+  --color-accent-600: #1d5fa8;
+  --color-accent-700: #164b86;
+
+  --color-signal-500: #e8590c;
+  --color-signal-600: #c94a07;
+
+  --color-success-50: #e9f6ef;
+  --color-success-700: #1b6b43;
+  --color-warning-50: #fdf3e2;
+  --color-warning-700: #8a4b00;
+  --color-danger-50: #fdeceb;
+  --color-danger-700: #a8201a;
+  --color-info-50: #e8f1fb;
+  --color-info-700: #1b4f8c;
+
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(22 32 42 / 0.06), 0 1px 1px rgb(22 32 42 / 0.03);
+}
+
+html {
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+}
+
+/* Чертёжная сетка для акцентных блоков */
+.blueprint {
+  background-color: #12202e;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.06) 1px, transparent 1px),
+    linear-gradient(rgb(255 255 255 / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.025) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+}
+
+.grid-paper {
+  background-image:
+    linear-gradient(var(--color-steel-100) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-steel-100) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-accent-500);
+  outline-offset: 2px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--color-steel-100), var(--color-steel-50), var(--color-steel-100));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.prose-doc h1,
+.prose-doc h2 {
+  font-weight: 600;
+  margin: 1.2em 0 0.4em;
+}
+.prose-doc p {
+  margin: 0.5em 0;
+}

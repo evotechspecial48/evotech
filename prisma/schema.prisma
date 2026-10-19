@@ -1,0 +1,850 @@
+// EvoTechnology — схема данных MVP.
+// Роли и разрешения описаны в коде (src/domain/rbac.ts) — см. docs/RBAC.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Пользователи и доступ ----------
+
+enum Role {
+  DIRECTOR
+  PROJECT_MANAGER
+  SALES_MANAGER
+  DESIGNER
+  CUSTOMER
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  BLOCKED
+}
+
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  inn         String?
+  kpp         String?
+  ogrn        String?
+  legalAddress String?
+  bankDetails String?
+  phone       String?
+  createdAt   DateTime @default(now())
+  users       User[]
+}
+
+model User {
+  id               String     @id @default(cuid())
+  email            String     @unique
+  passwordHash     String?
+  name             String
+  phone            String?
+  position         String?
+  role             Role
+  status           UserStatus @default(ACTIVE)
+  emailVerifiedAt  DateTime?
+  companyId        String?
+  company          Company?   @relation(fields: [companyId], references: [id])
+  // Задел под 2FA: секрет TOTP хранится зашифрованным, флаг включает второй шаг входа.
+  twoFactorEnabled Boolean    @default(false)
+  twoFactorSecret  String?
+  failedLogins     Int        @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  anonymizedAt     DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  sessions          Session[]
+  tokens            AuthToken[]
+  managedLeads      Lead[]            @relation("LeadManager")
+  customerLeads     Lead[]            @relation("LeadCustomer")
+  customerProjects  Project[]         @relation("ProjectCustomer")
+  managedProjects   Project[]         @relation("ProjectManager")
+  salesProjects     Project[]         @relation("ProjectSales")
+  memberships       ProjectMember[]
+  notifications     Notification[]
+  comments          Comment[]
+  quickOrders       QuickOrder[]
+  assignedStages    ProjectStage[]
+  tasks             Task[]            @relation("TaskAssignee")
+}
+
+model Session {
+  id        String   @id // sha256 от токена в cookie
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum AuthTokenType {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+  INVITE
+  CONTRACT_OTP
+}
+
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AuthTokenType
+  tokenHash String        @unique
+  // Для CONTRACT_OTP — id версии договора, к которой выдан код
+  subjectId String?
+  attempts  Int           @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, type])
+}
+
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
+
+// ---------- CRM ----------
+
+enum LeadStatus {
+  new
+  qualification
+  tz_preparation
+  commercial_offer
+  contract_approval
+  awaiting_signature
+  won
+  lost
+}
+
+enum LeadSource {
+  site_form
+  site_calculator
+  site_contact
+  cabinet
+  quick_order
+  manual
+  phone
+}
+
+model Lead {
+  id            String     @id @default(cuid())
+  number        Int        @unique @default(autoincrement())
+  title         String
+  contactName   String
+  email         String
+  phone         String?
+  companyName   String?
+  objectType    String?
+  description   String?
+  budget        String?
+  status        LeadStatus @default(new)
+  source        LeadSource @default(site_form)
+  utm           Json?
+  referrer      String?
+  lostReason    String?
+  managerId     String?
+  manager       User?      @relation("LeadManager", fields: [managerId], references: [id])
+  customerId    String?
+  customer      User?      @relation("LeadCustomer", fields: [customerId], references: [id])
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  comments      Comment[]
+  tasks         Task[]
+  offers        CommercialOffer[]
+  files         FileAsset[]
+  spec          TechnicalSpecification?
+  contracts     Contract[]
+  project       Project?
+
+  @@index([status])
+  @@index([managerId])
+  @@index([customerId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageId   String?
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  // id упомянутых пользователей (@имя)
+  mentions  String[]
+  // Внутренний комментарий сотрудников — заказчику не показывается
+  internal  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([projectId])
+}
+
+model Task {
+  id         String    @id @default(cuid())
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  projectId  String?
+  title      String
+  dueAt      DateTime?
+  assigneeId String?
+  assignee   User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  doneAt     DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+model CommercialOffer {
+  id          String      @id @default(cuid())
+  number      Int         @unique @default(autoincrement())
+  leadId      String
+  lead        Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  version     Int         @default(1)
+  // [{ title, qty, unit, price }] — цены в рублях
+  items       Json
+  total       Int
+  termDays    Int
+  validUntil  DateTime
+  notes       String?
+  status      OfferStatus @default(DRAFT)
+  createdById String
+  createdAt   DateTime    @default(now())
+}
+
+// ---------- Техническое задание ----------
+
+enum SpecStatus {
+  DRAFT
+  SUBMITTED
+  CLARIFICATION
+  APPROVED
+}
+
+model TechnicalSpecification {
+  id               String     @id @default(cuid())
+  leadId           String?    @unique
+  lead             Lead?      @relation(fields: [leadId], references: [id])
+  projectId        String?    @unique
+  project          Project?   @relation(fields: [projectId], references: [id])
+  status           SpecStatus @default(DRAFT)
+  data             Json
+  currentVersion   Int        @default(0)
+  clarification    String?
+  approvedVersionId String?   @unique
+  approvedVersion  TechnicalSpecificationVersion? @relation("ApprovedSnapshot", fields: [approvedVersionId], references: [id])
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  versions         TechnicalSpecificationVersion[]
+}
+
+model TechnicalSpecificationVersion {
+  id          String   @id @default(cuid())
+  specId      String
+  spec        TechnicalSpecification @relation(fields: [specId], references: [id], onDelete: Cascade)
+  version     Int
+  data        Json
+  changeNote  String?
+  // Изменённые поля относительно предыдущей версии
+  changedKeys String[]
+  authorId    String
+  // Неизменяемый снимок утверждённого ТЗ
+  isSnapshot  Boolean  @default(false)
+  checksum    String
+  createdAt   DateTime @default(now())
+  approvedOf  TechnicalSpecification? @relation("ApprovedSnapshot")
+
+  @@unique([specId, version])
+}
+
+// ---------- Проекты ----------
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TimeMode {
+  CALENDAR
+  WORKING
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  number         Int           @unique @default(autoincrement())
+  title          String
+  objectType     String?
+  address        String?
+  description    String?
+  status         ProjectStatus @default(ACTIVE)
+  customerId     String
+  customer       User          @relation("ProjectCustomer", fields: [customerId], references: [id])
+  managerId      String?
+  manager        User?         @relation("ProjectManager", fields: [managerId], references: [id])
+  salesManagerId String?
+  salesManager   User?         @relation("ProjectSales", fields: [salesManagerId], references: [id])
+  leadId         String?       @unique
+  lead           Lead?         @relation(fields: [leadId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  members        ProjectMember[]
+  stages         ProjectStage[]
+  spec           TechnicalSpecification?
+  timer          Timer?
+  requests       CustomerRequest[]
+  comments       Comment[]
+  files          FileAsset[]
+  contracts      Contract[]
+  payments       Payment[]
+  aiJobs         AIJob[]
+  variants       DesignVariant[]
+  statusHistory  StatusChange[]
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+}
+
+enum StageCode {
+  brief
+  sketch
+  model
+  drawings
+  documentation
+  delivery
+}
+
+enum StageStatus {
+  not_started
+  in_progress
+  internal_review
+  customer_review
+  changes_requested
+  approved
+  completed
+}
+
+model ProjectStage {
+  id          String      @id @default(cuid())
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  code        StageCode
+  order       Int
+  title       String
+  status      StageStatus @default(not_started)
+  assigneeId  String?
+  assignee    User?       @relation(fields: [assigneeId], references: [id])
+  startedAt   DateTime?
+  completedAt DateTime?
+  versions    StageVersion[]
+
+  @@unique([projectId, code])
+}
+
+enum VersionStatus {
+  DRAFT
+  INTERNAL_REVIEW
+  CUSTOMER_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+model StageVersion {
+  id                String        @id @default(cuid())
+  stageId           String
+  stage             ProjectStage  @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  version           Int
+  description       String
+  status            VersionStatus @default(DRAFT)
+  previousVersionId String?       @unique
+  previousVersion   StageVersion? @relation("VersionChain", fields: [previousVersionId], references: [id])
+  nextVersion       StageVersion? @relation("VersionChain")
+  createdById       String
+  // Контрольная сумма описания и файлов на момент согласования — защита от незаметного изменения
+  lockedAt          DateTime?
+  checksum          String?
+  createdAt         DateTime      @default(now())
+  files             FileAsset[]
+  approvals         Approval[]
+
+  @@unique([stageId, version])
+}
+
+enum ApprovalKind {
+  INTERNAL
+  CUSTOMER
+  SPEC
+}
+
+enum ApprovalDecision {
+  SUBMITTED
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+model Approval {
+  id             String           @id @default(cuid())
+  stageVersionId String?
+  stageVersion   StageVersion?    @relation(fields: [stageVersionId], references: [id], onDelete: Cascade)
+  specId         String?
+  specVersion    Int?
+  kind           ApprovalKind
+  decision       ApprovalDecision
+  comment        String?
+  userId         String
+  createdAt      DateTime         @default(now())
+
+  @@index([stageVersionId])
+  @@index([specId])
+}
+
+model StatusChange {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromStatus String?
+  toStatus   String
+  comment    String?
+  actorId    String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
+
+// ---------- Запросы заказчику и таймер ----------
+
+enum RequestStatus {
+  OPEN
+  ANSWERED
+  CANCELLED
+}
+
+model CustomerRequest {
+  id           String        @id @default(cuid())
+  projectId    String
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageCode    StageCode?
+  authorId     String
+  question     String
+  pausesTimer  Boolean       @default(true)
+  status       RequestStatus @default(OPEN)
+  answer       String?
+  answeredById String?
+  answeredAt   DateTime?
+  createdAt    DateTime      @default(now())
+}
+
+enum TimerState {
+  not_started
+  running
+  paused_waiting_customer
+  completed
+  overdue
+}
+
+model Timer {
+  id           String     @id @default(cuid())
+  projectId    String     @unique
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startedAt    DateTime?
+  durationDays Int
+  mode         TimeMode   @default(WORKING)
+  completedAt  DateTime?
+  // Последнее сохранённое состояние (для фильтров и аналитики); актуальное считается в src/domain/timer.ts
+  state        TimerState @default(not_started)
+  warnedAt     DateTime?
+  pauses       TimerPause[]
+}
+
+enum PauseKind {
+  AUTO
+  MANUAL
+}
+
+model TimerPause {
+  id          String    @id @default(cuid())
+  timerId     String
+  timer       Timer     @relation(fields: [timerId], references: [id], onDelete: Cascade)
+  kind        PauseKind
+  reason      String
+  initiatorId String?
+  startedAt   DateTime
+  endedAt     DateTime?
+  resumedById String?
+  resumeNote  String?
+}
+
+// ---------- Файлы ----------
+
+enum FileCategory {
+  SOURCE
+  PHOTO
+  SKETCH
+  MODEL
+  DRAWING
+  SPECIFICATION
+  DOCUMENT
+  CONTRACT
+  ARCHIVE
+  OTHER
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  SKIPPED
+}
+
+model FileAsset {
+  id             String        @id @default(cuid())
+  originalName   String
+  storageKey     String        @unique
+  mimeType       String
+  size           Int
+  checksum       String
+  category       FileCategory  @default(OTHER)
+  scanStatus     ScanStatus    @default(PENDING)
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageCode      StageCode?
+  stageVersionId String?
+  stageVersion   StageVersion? @relation(fields: [stageVersionId], references: [id])
+  leadId         String?
+  lead           Lead?         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  specId         String?
+  quickOrderId   String?
+  quickOrder     QuickOrder?   @relation(fields: [quickOrderId], references: [id], onDelete: Cascade)
+  // Файл недоступен заказчику (внутренний)
+  internal       Boolean       @default(false)
+  uploadedById   String?
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([projectId])
+  @@index([quickOrderId])
+}
+
+// ---------- Документы и договоры ----------
+
+enum TemplateKind {
+  OFFER
+  CONTRACT
+  QUICK_CONTRACT
+}
+
+model DocumentTemplate {
+  id        String       @id @default(cuid())
+  kind      TemplateKind
+  name      String
+  body      String
+  version   Int          @default(1)
+  active    Boolean      @default(true)
+  updatedAt DateTime     @updatedAt
+}
+
+enum ContractStatus {
+  DRAFT
+  AWAITING_SIGNATURE
+  SIGNED
+  CANCELLED
+}
+
+model Contract {
+  id             String         @id @default(cuid())
+  number         String         @unique
+  status         ContractStatus @default(DRAFT)
+  customerId     String
+  amount         Int
+  termDays       Int
+  leadId         String?
+  lead           Lead?          @relation(fields: [leadId], references: [id])
+  projectId      String?
+  project        Project?       @relation(fields: [projectId], references: [id])
+  quickOrderId   String?        @unique
+  quickOrder     QuickOrder?    @relation(fields: [quickOrderId], references: [id])
+  currentVersion Int            @default(1)
+  signedAt       DateTime?
+  createdAt      DateTime       @default(now())
+  versions       ContractVersion[]
+  acceptances    ContractAcceptance[]
+  payments       Payment[]
+}
+
+model ContractVersion {
+  id          String   @id @default(cuid())
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  version     Int
+  body        String
+  checksum    String
+  templateId  String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  acceptances ContractAcceptance[]
+
+  @@unique([contractId, version])
+}
+
+enum SignMethod {
+  CHECKBOX_OTP
+  EXTERNAL_EDO
+}
+
+model ContractAcceptance {
+  id          String          @id @default(cuid())
+  contractId  String
+  contract    Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionId   String
+  version     ContractVersion @relation(fields: [versionId], references: [id])
+  userId      String
+  method      SignMethod
+  ip          String?
+  userAgent   String?
+  checksum    String
+  acceptedAt  DateTime        @default(now())
+
+  @@unique([contractId, versionId])
+}
+
+// ---------- Платежи ----------
+
+enum PaymentStatus {
+  pending
+  authorized
+  paid
+  cancelled
+  failed
+  refunded
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  // OrderId для банка — уникальный и стабильный
+  orderId           String        @unique
+  idempotencyKey    String        @unique
+  provider          String
+  amount            Int           // в копейках
+  description       String
+  status            PaymentStatus @default(pending)
+  providerPaymentId String?       @unique
+  paymentUrl        String?
+  errorMessage      String?
+  testMode          Boolean       @default(true)
+  contractId        String?
+  contract          Contract?     @relation(fields: [contractId], references: [id])
+  projectId         String?
+  project           Project?      @relation(fields: [projectId], references: [id])
+  quickOrderId      String?
+  quickOrder        QuickOrder?   @relation(fields: [quickOrderId], references: [id])
+  payerId           String
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  events            PaymentEvent[]
+}
+
+model PaymentEvent {
+  id        String   @id @default(cuid())
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  // Ключ идемпотентности webhook: PaymentId + Status
+  eventKey  String   @unique
+  status    String
+  payload   Json
+  createdAt DateTime @default(now())
+}
+
+// ---------- Быстрые заказы и AI ----------
+
+enum StructureType {
+  CANOPY
+  GARAGE
+  TERRACE
+  GAZEBO
+  HANGAR
+}
+
+enum QuickOrderStatus {
+  DRAFT
+  GENERATING
+  AWAITING_SELECTION
+  CONTRACT
+  AWAITING_PAYMENT
+  PAID
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+model QuickOrder {
+  id                String           @id @default(cuid())
+  number            Int              @unique @default(autoincrement())
+  customerId        String
+  customer          User             @relation(fields: [customerId], references: [id])
+  structureType     StructureType
+  status            QuickOrderStatus @default(DRAFT)
+  params            Json
+  price             Int?             // в рублях
+  selectedVariantId String?          @unique
+  selectedVariant   DesignVariant?   @relation("SelectedVariant", fields: [selectedVariantId], references: [id])
+  archiveFileId     String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  variants          DesignVariant[]  @relation("OrderVariants")
+  aiJobs            AIJob[]
+  files             FileAsset[]
+  contract          Contract?
+  payments          Payment[]
+}
+
+enum VariantStatus {
+  PROPOSED
+  SELECTED
+  REJECTED
+}
+
+model DesignVariant {
+  id           String        @id @default(cuid())
+  quickOrderId String?
+  quickOrder   QuickOrder?   @relation("OrderVariants", fields: [quickOrderId], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  aiJobId      String
+  aiJob        AIJob         @relation(fields: [aiJobId], references: [id], onDelete: Cascade)
+  title        String
+  description  String
+  params       Json
+  imageSvg     String
+  priceDelta   Int           @default(0)
+  status       VariantStatus @default(PROPOSED)
+  createdAt    DateTime      @default(now())
+  selectedFor  QuickOrder?   @relation("SelectedVariant")
+}
+
+enum AIJobStatus {
+  draft
+  queued
+  processing
+  awaiting_selection
+  selected
+  generating_package
+  completed
+  failed
+}
+
+model AIJob {
+  id           String      @id @default(cuid())
+  status       AIJobStatus @default(draft)
+  provider     String
+  demo         Boolean     @default(true)
+  quickOrderId String?
+  quickOrder   QuickOrder? @relation(fields: [quickOrderId], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  input        Json
+  output       Json?
+  error        String?
+  // Фаза, на которой произошла ошибка, — для повторного запуска
+  failedPhase  AIJobStatus?
+  attempts     Int         @default(0)
+  lockedAt     DateTime?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  variants     DesignVariant[]
+
+  @@index([status])
+}
+
+// ---------- Уведомления, почта, журнал, настройки ----------
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model OutboundEmail {
+  id        String      @id @default(cuid())
+  to        String
+  subject   String
+  text      String
+  status    EmailStatus @default(PENDING)
+  attempts  Int         @default(0)
+  error     String?
+  createdAt DateTime    @default(now())
+  sentAt    DateTime?
+
+  @@index([status])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String?
+  entityId   String?
+  projectId  String?
+  ip         String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([projectId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
