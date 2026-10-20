@@ -12,13 +12,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const { f, u, i } = JSON.parse(payload) as { f: string; u: string; i: number };
   const file = await db.fileAsset.findUnique({ where: { id: f } });
   if (!file || file.deletedAt) return new Response("Файл не найден", { status: 404 });
-  const data = await storage().get(file.storageKey);
+  // Потоковая отдача: большие модели и архивы идут из хранилища клиенту, не занимая память сервера
+  let body: ReadableStream<Uint8Array>;
+  try {
+    body = await storage().stream(file.storageKey);
+  } catch {
+    return new Response("Файл временно недоступен в хранилище. Попробуйте позже.", { status: 502 });
+  }
   await audit({ actorId: u, action: file.category === "ARCHIVE" ? "archive.download" : "file.download", entityType: "FileAsset", entityId: file.id, projectId: file.projectId, ip: req.headers.get("x-forwarded-for")?.split(",")[0] ?? null });
   const inline = i === 1 && previewKind(file.mimeType) !== null;
-  return new Response(new Uint8Array(data), {
+  return new Response(body, {
     headers: {
       "Content-Type": file.mimeType,
-      "Content-Length": String(data.length),
+      "Content-Length": String(file.size),
       "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",

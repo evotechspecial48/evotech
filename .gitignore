@@ -8,3 +8,6 @@ storage/*
 *.log
 next-env.d.ts
 *.tsbuildinfo
+
+# Выгрузки с персональными данными клиентов — не коммитить
+data/

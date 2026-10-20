@@ -185,7 +185,7 @@ export interface UploadedFile {
 /** Загрузка нескольких файлов с индикатором прогресса (XHR — для событий progress). */
 export function FileUploader({
   target,
-  accept = ".pdf,.docx,.xlsx,.zip,.jpg,.jpeg,.png,.dwg,.dxf,.ifc,.step,.stp",
+  accept = ".pdf,.docx,.xlsx,.zip,.7z,.rar,.jpg,.jpeg,.png,.dwg,.dxf,.ifc,.step,.stp,.rvt",
   onUploaded,
   label = "Выберите файлы",
   hint,
@@ -268,7 +268,7 @@ export function FileUploader({
           <input ref={inputRef} type="file" multiple accept={accept} className="sr-only" onChange={(e) => upload(e.target.files)} disabled={progress !== null} />
         </label>
       </div>
-      <p className="mt-2 text-xs text-muted">{hint ?? "PDF, DOCX, XLSX, ZIP, JPG, PNG, DWG, DXF, IFC, STEP — до 50 МБ каждый."}</p>
+      <p className="mt-2 text-xs text-muted">{hint ?? "PDF, DOCX, XLSX, ZIP, 7Z, RAR, JPG, PNG, DWG, DXF, IFC, STEP, RVT — размер ограничен настройками (по умолчанию до 500 МБ)."}</p>
       {progress !== null && (
         <div className="mt-3" role="status" aria-live="polite">
           <div className="mb-1 text-xs text-muted">Загрузка… {progress}%</div>

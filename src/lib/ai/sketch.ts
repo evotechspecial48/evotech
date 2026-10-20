@@ -24,8 +24,8 @@ export function renderSketchSvg(
 ): string {
   const W = 960;
   const H = 600;
-  const ink = "#1f2a37";
-  const accent = "#1d5fa8";
+  const ink = "#202426";
+  const accent = "#0b3a63";
   const muted = "#7b8794";
 
   // --- Фасад ---

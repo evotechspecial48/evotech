@@ -47,7 +47,7 @@ export default function HomePage() {
       <section className="blueprint relative overflow-hidden text-white">
         <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:py-24">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#9ec5f0]">КМ · КМД · 3D · Расчёты</p>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#8fb4e0]">КМ · КМД · 3D · Расчёты</p>
             <h1 className="mt-4 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.4rem]">Проектирование металлоконструкций с прозрачными сроками</h1>
             <p className="mt-5 max-w-xl text-lg text-steel-200">
               Чертежи КМ и КМД, 3D-модели и расчёты — с личным кабинетом, где видно каждый этап, версию и остаток срока. Для небольших конструкций — быстрый заказ онлайн.
@@ -85,7 +85,7 @@ export default function HomePage() {
               <p className="mt-2 text-sm text-muted">{s.short}</p>
             </article>
           ))}
-          <Link href="/uslugi" className="flex items-center justify-center rounded-[var(--radius-card)] border border-dashed border-line-strong p-6 text-sm font-medium text-accent-700 hover:bg-surface">
+          <Link href="/o-kompanii#uslugi" className="flex items-center justify-center rounded-[var(--radius-card)] border border-dashed border-line-strong p-6 text-sm font-medium text-accent-700 hover:bg-surface">
             Все услуги →
           </Link>
         </div>

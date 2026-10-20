@@ -15,6 +15,7 @@ export const LEAD_STATUS: Record<string, { label: string; tone: Tone }> = {
 };
 
 export const LEAD_SOURCE: Record<string, string> = {
+  avito: "Авито",
   site_form: "Форма на сайте",
   site_calculator: "Калькулятор на сайте",
   site_contact: "Контактная форма",

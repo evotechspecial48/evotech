@@ -161,6 +161,10 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
               ["Руководитель проекта", project.manager?.name ?? "не назначен"],
               ["Менеджер проектов", project.salesManager?.name],
               ["Проектировщики", project.members.map((m) => m.user.name).join(", ") || "не назначены"],
+              // Оплата исполнителей — только для руководителя проекта и директора
+              ...(manage && project.members.some((m) => m.fee || m.advance)
+                ? ([["Оплата исполнителям", project.members.map((m) => `${m.user.name}: ${rub(m.fee)}${m.advance ? `, аванс ${rub(m.advance)}` : ""}`).join("; ")]] as [string, string][])
+                : []),
             ]}
           />
           {manage && (

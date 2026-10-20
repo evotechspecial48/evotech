@@ -78,6 +78,7 @@ npm run db:seed                 # по желанию: демо-данные (с
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — архитектура, модули, модель данных, безопасность
 - [docs/RBAC.md](docs/RBAC.md) — матрица ролей и разрешений
 - [docs/API.md](docs/API.md) — API, server actions и внешние интеграции (Т-Банк, почта, хранилище)
+- [docs/STORAGE.md](docs/STORAGE.md) — хранилище файлов в Облаке Mail.ru (WebDAV)
 - [docs/AI_PROVIDER.md](docs/AI_PROVIDER.md) — как заменить MockAIProvider на ClaudeProvider
 - [docs/FEATURES.md](docs/FEATURES.md) — реализованные функции и критерии приёмки
 - [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) — допущения, открытые вопросы, ограничения MVP и следующие шаги

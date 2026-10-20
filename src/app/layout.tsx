@@ -9,15 +9,15 @@ const siteUrl = process.env.APP_URL ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: { default: "EvoTechnology — проектирование металлоконструкций КМ, КМД", template: "%s — EvoTechnology" },
+  title: { default: "ЭвоТех — проектирование металлоконструкций КМ, КМД", template: "%s — ЭвоТех" },
   description:
     "Проектирование металлоконструкций: КМ, КМД, 3D-модели, расчёты на прочность. Онлайн-сервис с прозрачными этапами, сроками и быстрым заказом навесов, гаражей и террас.",
   keywords: ["проектирование металлоконструкций", "КМ", "КМД", "Tekla Structures", "чертежи КМД", "проект навеса", "3D-модель"],
-  openGraph: { type: "website", locale: "ru_RU", siteName: "EvoTechnology" },
+  openGraph: { type: "website", locale: "ru_RU", siteName: "ЭвоТех" },
   robots: { index: true, follow: true },
 };
 
-export const viewport: Viewport = { themeColor: "#16202a", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#202426", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

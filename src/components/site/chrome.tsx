@@ -1,29 +1,31 @@
+import Image from "next/image";
 import Link from "next/link";
 import { COMPANY } from "@/content/site";
 import { btnClass } from "../ui";
 
-export function Logo({ light = false }: { light?: boolean }) {
+// Фирменный логотип «ЭвоТех» (public/brand). Светлая версия — для тёмного фона.
+export function Logo({ light = false, height = 40 }: { light?: boolean; height?: number }) {
   return (
-    <span className="inline-flex items-center gap-2.5">
-      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
-        <rect x="1" y="1" width="32" height="32" rx="7" fill={light ? "#ffffff" : "#16202a"} />
-        <path d="M9 9h16v3.2h-6.4v9.6H25V25H9v-3.2h6.4v-9.6H9z" fill={light ? "#16202a" : "#ffffff"} />
-        <path d="M25 9l-3 3.2" stroke="#e8590c" strokeWidth="2" />
-      </svg>
-      <span className={`text-lg font-semibold tracking-tight ${light ? "text-white" : "text-ink"}`}>
-        Evo<span className="text-accent-500">Technology</span>
-      </span>
-    </span>
+    <Image
+      src={light ? "/brand/logo-light.png" : "/brand/logo.png"}
+      alt="ЭвоТех"
+      width={Math.round((height * 1200) / 355)}
+      height={height}
+      priority={!light}
+      className="h-auto w-auto"
+      style={{ height }}
+    />
   );
 }
 
+// Услуги, этапы работы, сведения о компании и контакты собраны на одной странице /o-kompanii
 const NAV = [
-  { href: "/uslugi", label: "Услуги" },
-  { href: "/raboty", label: "Примеры работ" },
-  { href: "/process", label: "Как мы работаем" },
-  { href: "/bystryj-zakaz", label: "Быстрый заказ" },
   { href: "/o-kompanii", label: "О компании" },
-  { href: "/kontakty", label: "Контакты" },
+  { href: "/o-kompanii#uslugi", label: "Услуги" },
+  { href: "/o-kompanii#process", label: "Как мы работаем" },
+  { href: "/raboty", label: "Примеры работ" },
+  { href: "/bystryj-zakaz", label: "Быстрый заказ" },
+  { href: "/o-kompanii#kontakty", label: "Контакты" },
 ];
 
 // Шапка без обращения к сессии — публичные страницы остаются статическими (быстрая загрузка, SEO).
@@ -32,7 +34,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" aria-label="EvoTechnology — на главную">
+        <Link href="/" aria-label="ЭвоТех — на главную">
           <Logo />
         </Link>
         <nav aria-label="Основное меню" className="hidden items-center gap-0.5 xl:flex">
@@ -80,7 +82,7 @@ export function SiteFooter() {
     <footer className="blueprint mt-auto text-steel-200">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-4">
         <div className="md:col-span-2">
-          <Logo light />
+          <Logo light height={46} />
           <p className="mt-3 max-w-sm text-sm text-steel-200">{COMPANY.tagline}. КМ, КМД, 3D-модели, расчёты и онлайн-сервис проектирования.</p>
           <p className="mt-4 text-sm">
             <a href={COMPANY.phoneHref} className="font-semibold text-white">
@@ -141,7 +143,7 @@ export function SiteFooter() {
           </p>
         </div>
       </div>
-      <div className="border-t border-white/10 py-4 text-center text-xs text-steel-400">© {new Date().getFullYear()} EvoTechnology. Все права защищены.</div>
+      <div className="border-t border-white/10 py-4 text-center text-xs text-steel-400">© {new Date().getFullYear()} ЭвоТех (EvoTechnology). Все права защищены.</div>
     </footer>
   );
 }

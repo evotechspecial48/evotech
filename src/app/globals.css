@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
-/* Дизайн-токены EvoTechnology: светлый нейтральный фон, графит и сталь,
-   холодный синий акцент; контрастный оранжевый — только для важных действий. */
+/* Дизайн-токены «ЭвоТех» по фирменному логотипу: графит #202426 и тёмно-синий #0A3457
+   на светлом нейтральном фоне; контрастный оранжевый — только для главных действий. */
 @theme {
   --font-sans: var(--font-plex), "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 
   --color-bg: #f4f6f8;
   --color-surface: #ffffff;
-  --color-ink: #16202a;
-  --color-ink-soft: #2c3a47;
-  --color-muted: #566370;
+  --color-ink: #202426;
+  --color-ink-soft: #33393e;
+  --color-muted: #575f68;
   --color-line: #dce2e8;
   --color-line-strong: #c3ccd5;
 
@@ -19,14 +19,14 @@
   --color-steel-200: #c9d3dd;
   --color-steel-400: #8696a6;
   --color-steel-600: #4c5b6a;
-  --color-steel-800: #26323e;
-  --color-steel-900: #18212b;
+  --color-steel-800: #2b3035;
+  --color-steel-900: #1c1f22;
 
-  --color-accent-50: #eaf2fb;
-  --color-accent-100: #d2e3f5;
-  --color-accent-500: #2a6fbf;
-  --color-accent-600: #1d5fa8;
-  --color-accent-700: #164b86;
+  --color-accent-50: #eaf0f6;
+  --color-accent-100: #cddbe9;
+  --color-accent-500: #1f5590;
+  --color-accent-600: #0b3a63;
+  --color-accent-700: #082b4a;
 
   --color-signal-500: #e8590c;
   --color-signal-600: #c94a07;
@@ -37,8 +37,8 @@
   --color-warning-700: #8a4b00;
   --color-danger-50: #fdeceb;
   --color-danger-700: #a8201a;
-  --color-info-50: #e8f1fb;
-  --color-info-700: #1b4f8c;
+  --color-info-50: #eaf0f6;
+  --color-info-700: #0b3a63;
 
   --radius-card: 0.75rem;
   --shadow-card: 0 1px 2px rgb(22 32 42 / 0.06), 0 1px 1px rgb(22 32 42 / 0.03);
@@ -58,7 +58,7 @@ body {
 
 /* Чертёжная сетка для акцентных блоков */
 .blueprint {
-  background-color: #12202e;
+  background-color: #0a2340;
   background-image:
     linear-gradient(rgb(255 255 255 / 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgb(255 255 255 / 0.06) 1px, transparent 1px),

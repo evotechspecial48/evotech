@@ -21,6 +21,41 @@ export interface UploadTarget {
   internal?: boolean;
 }
 
+const STAGE_FOLDER: Record<StageCode, string> = {
+  brief: "01 ТЗ",
+  sketch: "02 Эскиз",
+  model: "03 3D-модель",
+  drawings: "04 Чертежи",
+  documentation: "05 Документация",
+  delivery: "06 Передача заказчику",
+};
+
+const folder = (s: string) => safeFileName(s).replace(/[.\s]+$/, "").slice(0, 70) || "Без названия";
+
+/**
+ * Понятный путь в хранилище (в Облаке Mail.ru файлы удобно смотреть по папкам):
+ *   Проекты/12 НОРЛАБ — МАФ/03 3D-модель/a1b2c3d4_модель.ifc
+ *   Заявки/34/…, Быстрые заказы/5/…
+ * Короткий случайный префикс исключает перезапись одноимённых файлов.
+ */
+export async function storageKeyFor(target: UploadTarget, name: string): Promise<string> {
+  const file = `${randomUUID().slice(0, 8)}_${safeFileName(name)}`;
+  if (target.projectId) {
+    const p = await db.project.findUnique({ where: { id: target.projectId }, select: { number: true, title: true } });
+    const stage = target.stageCode ? STAGE_FOLDER[target.stageCode] : "Файлы проекта";
+    return [`Проекты`, folder(`${p?.number ?? "?"} ${p?.title ?? ""}`), stage, file].join("/");
+  }
+  if (target.quickOrderId) {
+    const q = await db.quickOrder.findUnique({ where: { id: target.quickOrderId }, select: { number: true } });
+    return ["Быстрые заказы", String(q?.number ?? "?"), target.category === "ARCHIVE" ? "Архив" : "Исходные данные", file].join("/");
+  }
+  if (target.leadId) {
+    const l = await db.lead.findUnique({ where: { id: target.leadId }, select: { number: true } });
+    return ["Заявки", String(l?.number ?? "?"), file].join("/");
+  }
+  return ["Прочее", new Date().toISOString().slice(0, 7), file].join("/");
+}
+
 async function maxSizeMb(): Promise<number> {
   const s = await db.setting.findUnique({ where: { key: "files.maxSizeMb" } });
   return typeof s?.value === "number" ? s.value : env.FILE_MAX_SIZE_MB;
@@ -61,7 +96,7 @@ export async function saveUpload(user: SessionUser, file: File, target: UploadTa
     await audit({ actorId: user.id, action: "file.rejected", ip, meta: { name, reason: "infected" } });
     throw new UserError(`${name}: файл не прошёл антивирусную проверку`);
   }
-  const key = `${new Date().toISOString().slice(0, 7)}/${randomUUID()}.${check.ext}`;
+  const key = await storageKeyFor(target, name);
   await storage().put(key, data, check.mime);
   const asset = await db.fileAsset.create({
     data: {
@@ -86,8 +121,7 @@ export async function saveUpload(user: SessionUser, file: File, target: UploadTa
 
 /** Сохранение файла, сформированного системой (договор, архив). */
 export async function saveGenerated(data: Buffer, name: string, mime: string, target: UploadTarget, actorId: string | null): Promise<FileAsset> {
-  const ext = name.split(".").pop() ?? "bin";
-  const key = `generated/${new Date().toISOString().slice(0, 7)}/${randomUUID()}.${ext}`;
+  const key = await storageKeyFor(target, name);
   await storage().put(key, data, mime);
   return db.fileAsset.create({
     data: {

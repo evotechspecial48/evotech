@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // Услуги, процесс и контакты объединены в /o-kompanii — старые адреса ведут на разделы страницы
+  async redirects() {
+    return [
+      { source: "/uslugi", destination: "/o-kompanii#uslugi", permanent: true },
+      { source: "/process", destination: "/o-kompanii#process", permanent: true },
+      { source: "/kontakty", destination: "/o-kompanii#kontakty", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

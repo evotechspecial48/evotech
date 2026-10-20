@@ -131,6 +131,7 @@ enum LeadStatus {
 }
 
 enum LeadSource {
+  avito
   site_form
   site_calculator
   site_contact
@@ -331,6 +332,9 @@ model ProjectMember {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+  // Оплата исполнителя по проекту, ₽ (видна только руководителям)
+  fee       Int?
+  advance   Int?
   createdAt DateTime @default(now())
 
   @@unique([projectId, userId])

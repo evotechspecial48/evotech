@@ -5,7 +5,7 @@ export function PageHero({ eyebrow, title, lead }: { eyebrow: string; title: str
   return (
     <section className="blueprint text-white">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-16">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#9ec5f0]">{eyebrow}</p>
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#8fb4e0]">{eyebrow}</p>
         <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
         {lead && <p className="mt-3 max-w-2xl text-lg text-steel-200">{lead}</p>}
       </div>

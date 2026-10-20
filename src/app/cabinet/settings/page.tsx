@@ -63,7 +63,14 @@ export default async function SettingsPage() {
                 ["AI-провайдер", <Badge key="ai" tone={env.AI_PROVIDER === "mock" ? "warning" : "success"}>{env.AI_PROVIDER === "mock" ? "Демонстрационный (MockAIProvider)" : `Claude (${env.CLAUDE_MODEL})`}</Badge>],
                 ["Эквайринг", <Badge key="pay" tone={env.PAYMENT_PROVIDER === "mock" ? "warning" : "success"}>{env.PAYMENT_PROVIDER === "mock" ? "Демо-банк" : "Т-Банк"}</Badge>],
                 ["Почта", env.MAIL_TRANSPORT === "smtp" ? `SMTP ${env.SMTP_HOST}:${env.SMTP_PORT}` : "Вывод в лог"],
-                ["Хранилище файлов", env.STORAGE_DRIVER === "local" ? "Локальный диск" : "S3"],
+                [
+                  "Хранилище файлов",
+                  env.STORAGE_DRIVER === "webdav"
+                    ? `Облако по WebDAV (${(env.WEBDAV_URL ?? "").replace(/^https?:\/\//, "")}, папка ${env.WEBDAV_ROOT})`
+                    : env.STORAGE_DRIVER === "s3"
+                      ? "S3"
+                      : "Локальный диск сервера",
+                ],
                 ["Электронная подпись", "Простая ЭП (код из письма); ЭДО — точка расширения"],
               ]}
             />

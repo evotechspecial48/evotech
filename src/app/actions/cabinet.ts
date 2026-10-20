@@ -471,7 +471,7 @@ export async function updateSettingsAction(_: ActionState, fd: FormData): Promis
   return runAction(async () => {
     const user = await actor("settings.manage");
     const maxSize = num(fd, "maxSizeMb");
-    if (!maxSize || maxSize < 1 || maxSize > 500) throw new UserError("Размер файла: от 1 до 500 МБ");
+    if (!maxSize || maxSize < 1 || maxSize > 2000) throw new UserError("Размер файла: от 1 до 2000 МБ");
     const holidays = str(fd, "holidays", 5000).split(/[\s,;]+/).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
     const requisites = {
       name: str(fd, "reqName", 200),

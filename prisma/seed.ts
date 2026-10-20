@@ -37,7 +37,7 @@ async function main() {
   await db.setting.createMany({
     data: [
       { key: "timer.defaultMode", value: "WORKING" },
-      { key: "files.maxSizeMb", value: 50 },
+      { key: "files.maxSizeMb", value: 500 },
       { key: "calendar.holidays", value: ["2026-01-01", "2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-02-23", "2026-03-09", "2026-05-01", "2026-05-11", "2026-06-12", "2026-11-04", "2026-12-31"] },
       {
         key: "company.requisites",

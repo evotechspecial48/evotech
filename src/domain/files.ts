@@ -5,6 +5,9 @@ export const ALLOWED_EXTENSIONS: Record<string, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   zip: "application/zip",
+  "7z": "application/x-7z-compressed",
+  rar: "application/vnd.rar",
+  rvt: "application/octet-stream",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
@@ -17,7 +20,7 @@ export const ALLOWED_EXTENSIONS: Record<string, string> = {
   txt: "text/plain",
 };
 
-export const DEFAULT_MAX_SIZE_MB = 50;
+export const DEFAULT_MAX_SIZE_MB = 500;
 
 export function extensionOf(name: string): string {
   const idx = name.lastIndexOf(".");
