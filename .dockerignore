@@ -3,3 +3,6 @@ node_modules
 storage
 .env
 .git
+data
+deploy/backups
+*.log

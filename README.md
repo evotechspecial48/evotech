@@ -75,6 +75,7 @@ npm run db:seed                 # по желанию: демо-данные (с
 
 ## Документация
 
+- [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — полная спецификация: блоки сайта, модули кабинета, процессы, данные, инфраструктура
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — архитектура, модули, модель данных, безопасность
 - [docs/RBAC.md](docs/RBAC.md) — матрица ролей и разрешений
 - [docs/API.md](docs/API.md) — API, server actions и внешние интеграции (Т-Банк, почта, хранилище)

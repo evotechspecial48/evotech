@@ -26,6 +26,19 @@ services:
       - "1025:1025"
 
   # Полный запуск приложения в контейнере: docker compose --profile app up --build
+  migrate:
+    profiles: ["app"]
+    build:
+      context: .
+      target: worker
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://evotech:evotech@db:5432/evotech?schema=public
+    command: ["npx", "prisma", "migrate", "deploy"]
+
   app:
     profiles: ["app"]
     build:

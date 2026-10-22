@@ -18,14 +18,14 @@ export function Logo({ light = false, height = 40 }: { light?: boolean; height?:
   );
 }
 
-// Услуги, этапы работы, сведения о компании и контакты собраны на одной странице /o-kompanii
+// Все разделы собраны на главной посадочной странице — пункты меню ведут на её якоря
 const NAV = [
-  { href: "/o-kompanii", label: "О компании" },
-  { href: "/o-kompanii#uslugi", label: "Услуги" },
-  { href: "/o-kompanii#process", label: "Как мы работаем" },
+  { href: "/#o-nas", label: "О компании" },
+  { href: "/#uslugi", label: "Услуги" },
+  { href: "/#process", label: "Как мы работаем" },
   { href: "/raboty", label: "Примеры работ" },
   { href: "/bystryj-zakaz", label: "Быстрый заказ" },
-  { href: "/o-kompanii#kontakty", label: "Контакты" },
+  { href: "/#kontakty", label: "Контакты" },
 ];
 
 // Шапка без обращения к сессии — публичные страницы остаются статическими (быстрая загрузка, SEO).

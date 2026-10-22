@@ -121,6 +121,18 @@ export async function requestPasswordReset(emailRaw: string, ip: string | null) 
   await queueEmail(email, "Восстановление пароля", `Для установки нового пароля перейдите по ссылке:\n${env.APP_URL}/reset-password?token=${token}\n\nСсылка действует 2 часа. Если вы не запрашивали восстановление, проигнорируйте письмо.`);
 }
 
+/** Смена пароля из профиля: проверка текущего, завершение остальных сессий. */
+export async function changePassword(actor: SessionUser, current: string, next: string, keepSessionId: string | null) {
+  const user = await db.user.findUnique({ where: { id: actor.id } });
+  if (!user?.passwordHash || !(await verifyPassword(current, user.passwordHash))) throw new UserError("Текущий пароль указан неверно", { current: "Неверный пароль" });
+  const pw = passwordProblems(next);
+  if (pw) throw new UserError(pw, { password: pw });
+  if (current === next) throw new UserError("Новый пароль совпадает с текущим", { password: "Пароль не изменился" });
+  await db.user.update({ where: { id: actor.id }, data: { passwordHash: await hashPassword(next) } });
+  await db.session.deleteMany({ where: { userId: actor.id, ...(keepSessionId ? { id: { not: keepSessionId } } : {}) } });
+  await audit({ actorId: actor.id, action: "auth.password_reset", entityType: "User", entityId: actor.id, meta: { via: "profile" } });
+}
+
 export async function resetPassword(token: string, password: string) {
   const pw = passwordProblems(password);
   if (pw) throw new UserError(pw, { password: pw });

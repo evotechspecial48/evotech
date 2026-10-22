@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { ROLE_LABELS } from "@/domain/rbac";
-import { resendVerificationAction, updateProfileAction } from "@/app/actions/cabinet";
+import { changePasswordAction, resendVerificationAction, updateProfileAction } from "@/app/actions/cabinet";
 import { ActionForm, FieldError, SubmitButton } from "@/components/client";
 import { Alert, btnClass, Card, DefList, fieldClass, PageHeader } from "@/components/ui";
 
@@ -26,6 +26,26 @@ export default async function ProfilePage() {
               <input id="phone" name="phone" defaultValue={user.phone ?? ""} className={fieldClass} />
             </div>
             <SubmitButton>Сохранить</SubmitButton>
+          </ActionForm>
+        </Card>
+        <Card title="Смена пароля">
+          <ActionForm action={changePasswordAction} resetOnSuccess className="space-y-3">
+            <div>
+              <label htmlFor="current" className="mb-1 block text-sm font-medium text-ink-soft">
+                Текущий пароль
+              </label>
+              <input id="current" name="current" type="password" autoComplete="current-password" className={fieldClass} />
+              <FieldError name="current" />
+            </div>
+            <div>
+              <label htmlFor="password" className="mb-1 block text-sm font-medium text-ink-soft">
+                Новый пароль
+              </label>
+              <input id="password" name="password" type="password" autoComplete="new-password" className={fieldClass} />
+              <p className="mt-1 text-xs text-muted">Не короче 8 символов, буквы и цифры</p>
+              <FieldError name="password" />
+            </div>
+            <SubmitButton>Сменить пароль</SubmitButton>
           </ActionForm>
         </Card>
         <Card title="Учётная запись">

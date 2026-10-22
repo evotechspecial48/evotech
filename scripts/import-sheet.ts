@@ -5,6 +5,7 @@
 // Клиентам письма не отправляются, их учётные записи создаются в статусе «приглашён» без пароля.
 // Запуск: npm run import:sheet
 
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { LeadSource, LeadStatus, Prisma, Role } from "@prisma/client";
 import { db } from "../src/lib/db";
@@ -14,7 +15,8 @@ import { createProjectTx } from "../src/services/projects";
 import { CONTRACT_TEMPLATE } from "../prisma/templates";
 
 const IMPORT_TAG = "sheet-2026-10";
-const STAFF_PASSWORD = process.env.IMPORT_STAFF_PASSWORD ?? "Demo2026!";
+// Пароль новым сотрудникам: IMPORT_STAFF_PASSWORD (локальная проверка) или случайный, выводится один раз
+const STAFF_PASSWORD = process.env.IMPORT_STAFF_PASSWORD;
 
 // ---------- CSV ----------
 
@@ -83,19 +85,27 @@ const normName = (s: string) => s.toLowerCase().replace(/ё/g, "е").replace(/[�
 
 // Список сотрудников с контактами хранится вне репозитория: data/import/staff.json
 // [{ "name": "...", "role": "DIRECTOR|PROJECT_MANAGER|SALES_MANAGER", "phone": "+7...", "position": "...", "login": "латиницей" }]
-const STAFF: { name: string; role: Role; phone: string; position: string; login: string }[] = JSON.parse(readFileSync("data/import/staff.json", "utf8"));
+const STAFF: { name: string; role: Role; phone: string; position: string; login: string; email?: string }[] = JSON.parse(readFileSync("data/import/staff.json", "utf8"));
 
 async function upsertStaff() {
-  const passwordHash = await hashPassword(STAFF_PASSWORD);
   const result: Record<string, string> = {};
+  const issued: { login: string; password: string }[] = [];
   for (const s of STAFF) {
-    const email = `${s.login}@evotech.local`;
-    const u = await db.user.upsert({
-      where: { email },
-      create: { email, name: s.name, role: s.role, phone: s.phone, position: s.position, passwordHash, emailVerifiedAt: new Date() },
-      update: { name: s.name, role: s.role, phone: s.phone, position: s.position },
-    });
+    const email = s.email ?? `${s.login}@evotech.local`;
+    const existing = await db.user.findUnique({ where: { email } });
+    if (existing) {
+      await db.user.update({ where: { id: existing.id }, data: { name: s.name, role: s.role, phone: s.phone, position: s.position } });
+      result[s.role] = existing.id;
+      continue;
+    }
+    const password = STAFF_PASSWORD ?? randomBytes(9).toString("base64url");
+    const u = await db.user.create({ data: { email, name: s.name, role: s.role, phone: s.phone, position: s.position, passwordHash: await hashPassword(password), emailVerifiedAt: new Date() } });
+    if (!STAFF_PASSWORD) issued.push({ login: email, password });
     result[s.role] = u.id;
+  }
+  if (issued.length) {
+    console.log("Временные пароли сотрудников (показываются один раз, смените в профиле):");
+    console.table(issued);
   }
   return result as Record<"DIRECTOR" | "PROJECT_MANAGER" | "SALES_MANAGER", string>;
 }

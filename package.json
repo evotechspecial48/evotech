@@ -19,7 +19,8 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "postinstall": "prisma generate",
-    "import:sheet": "tsx --env-file=.env scripts/import-sheet.ts"
+    "import:sheet": "tsx --env-file=.env scripts/import-sheet.ts",
+    "bootstrap": "tsx --env-file=.env scripts/bootstrap.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

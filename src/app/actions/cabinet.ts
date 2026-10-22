@@ -513,6 +513,17 @@ export async function updateTemplateAction(_: ActionState, fd: FormData): Promis
   });
 }
 
+export async function changePasswordAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor();
+    const { cookies } = await import("next/headers");
+    const { sha256 } = await import("@/lib/crypto");
+    const token = (await cookies()).get("evo_session")?.value;
+    await users.changePassword(user, String(fd.get("current") ?? ""), String(fd.get("password") ?? ""), token ? sha256(token) : null);
+    return { ok: true, message: "Пароль изменён. Другие сеансы завершены." };
+  });
+}
+
 export async function updateProfileAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const user = await actor();
