@@ -19,7 +19,7 @@ export interface FileStorage {
   remove(key: string): Promise<void>;
 }
 
-class LocalStorage implements FileStorage {
+export class LocalStorage implements FileStorage {
   readonly name = "local";
   constructor(private root: string) {}
   private resolve(key: string) {
