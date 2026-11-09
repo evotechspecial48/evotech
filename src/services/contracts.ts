@@ -60,7 +60,7 @@ export async function contractVars(input: {
   };
 }
 
-async function nextNumber(prefix: string): Promise<string> {
+export async function nextNumber(prefix: string): Promise<string> {
   const year = new Date().getFullYear();
   const count = await db.contract.count({ where: { number: { startsWith: `${prefix}-${year}` } } });
   return `${prefix}-${year}-${String(count + 1).padStart(4, "0")}`;
@@ -210,9 +210,16 @@ export async function acceptContract(user: SessionUser, contractId: string, code
     if (contract.quickOrderId) {
       await tx.quickOrder.update({ where: { id: contract.quickOrderId }, data: { status: "AWAITING_PAYMENT" } });
     }
+    // Проект уже создан (заказчик заведён вручную) — срок отсчитывается с момента подписания
+    if (contract.projectId) {
+      await tx.timer.updateMany({ where: { projectId: contract.projectId, startedAt: null }, data: { startedAt: now, state: "running" } });
+    }
   });
   await audit({ actorId: user.id, action: "contract.accept", entityType: "Contract", entityId: contractId, ip, meta: { version: version.version, checksum: version.checksum } });
-  if (contract.leadId) {
+  if (contract.projectId) {
+    const project = await db.project.findUnique({ where: { id: contract.projectId }, select: { number: true, managerId: true, salesManagerId: true } });
+    await notify([project?.managerId, project?.salesManagerId], "status.changed", `Заказчик подписал договор ${contract.number}`, `Проект №${project?.number}: таймер срока запущен.`, `/cabinet/projects/${contract.projectId}`);
+  } else if (contract.leadId) {
     const lead = await db.lead.findUnique({ where: { id: contract.leadId }, select: { managerId: true, number: true } });
     await notify([lead?.managerId], "status.changed", `Заказчик подписал договор ${contract.number}`, `Заявка №${lead?.number}. Можно создавать проект.`, `/cabinet/leads/${contract.leadId}`);
   }

@@ -28,18 +28,9 @@ const jsonLd = {
   ],
 };
 
-const ANCHORS = [
-  ["o-nas", "О компании"],
-  ["uslugi", "Услуги"],
-  ["process", "Как мы работаем"],
-  ["works", "Примеры"],
-  ["calc", "Расчёт"],
-  ["kontakty", "Контакты"],
-] as const;
-
 function Section({ id, eyebrow, title, lead, children, className = "" }: { id?: string; eyebrow?: string; title: string; lead?: string; children: React.ReactNode; className?: string }) {
   return (
-    <section id={id} className={`scroll-mt-32 py-16 sm:py-20 ${className}`} aria-labelledby={id ? `${id}-title` : undefined}>
+    <section id={id} className={`scroll-mt-20 py-16 sm:py-20 ${className}`} aria-labelledby={id ? `${id}-title` : undefined}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
         {eyebrow && <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent-600">{eyebrow}</p>}
         <h2 id={id ? `${id}-title` : undefined} className="mt-2 max-w-3xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
@@ -100,19 +91,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Навигация по разделам страницы */}
-      <nav aria-label="Разделы страницы" className="sticky top-16 z-20 border-b border-line bg-surface/95 backdrop-blur">
-        <ul className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 sm:px-6">
-          {ANCHORS.map(([id, label]) => (
-            <li key={id}>
-              <a href={`#${id}`} className="block whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-medium text-ink-soft hover:border-accent-600 hover:text-accent-700">
-                {label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-
       {/* О компании */}
       <Section id="o-nas" eyebrow="О компании" title="Проектная организация полного цикла по металлоконструкциям">
         <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr]">
@@ -163,7 +141,7 @@ export default function HomePage() {
       <Section id="uslugi" eyebrow="Услуги" title="Что мы проектируем" lead="От отдельного узла до каркаса промышленного здания. Документация по ГОСТ и СПДС." className="bg-surface">
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {SERVICES.map((s, i) => (
-            <article key={s.slug} id={s.slug} className="scroll-mt-32 rounded-[var(--radius-card)] border border-line bg-bg p-6">
+            <article key={s.slug} id={s.slug} className="scroll-mt-20 rounded-[var(--radius-card)] border border-line bg-bg p-6">
               <p className="font-mono text-xs text-steel-400">{String(i + 1).padStart(2, "0")}</p>
               <h3 className="mt-1 text-lg font-semibold">{s.title}</h3>
               <p className="mt-2 text-sm text-muted">{s.short}</p>

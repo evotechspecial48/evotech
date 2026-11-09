@@ -21,8 +21,6 @@ export function Logo({ light = false, height = 40 }: { light?: boolean; height?:
 // Все разделы собраны на главной посадочной странице — пункты меню ведут на её якоря
 const NAV = [
   { href: "/#o-nas", label: "О компании" },
-  { href: "/#uslugi", label: "Услуги" },
-  { href: "/#process", label: "Как мы работаем" },
   { href: "/raboty", label: "Примеры работ" },
   { href: "/bystryj-zakaz", label: "Быстрый заказ" },
   { href: "/#kontakty", label: "Контакты" },

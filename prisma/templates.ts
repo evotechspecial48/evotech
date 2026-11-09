@@ -39,7 +39,8 @@ export const CONTRACT_TEMPLATE = `# ДОГОВОР № {{number}} на выпо�
 
 Исполнитель: {{executorName}}, ИНН {{executorInn}}, адрес: {{executorAddress}}, банк: {{executorBank}}.
 
-Заказчик: {{customerName}}, контактное лицо: {{customerContact}}, e-mail: {{customerEmail}}, тел.: {{customerPhone}}.`;
+Заказчик: {{customerName}}, контактное лицо: {{customerContact}}, e-mail: {{customerEmail}}, тел.: {{customerPhone}}.
+Реквизиты Заказчика: {{customerRequisites}}`;
 
 export const QUICK_CONTRACT_TEMPLATE = `# ДОГОВОР-ОФЕРТА № {{number}} на эскизное проектирование малой конструкции
 

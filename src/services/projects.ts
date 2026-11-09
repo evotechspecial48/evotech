@@ -136,12 +136,42 @@ export async function setProjectStatus(user: SessionUser, projectId: string, sta
   const access = await loadProjectAccess(user, projectId);
   if (!access.canManage) throw new ForbiddenError();
   if (comment.trim().length < 3) throw new UserError("Укажите причину изменения статуса");
-  await db.$transaction([
-    db.project.update({ where: { id: projectId }, data: { status } }),
-    db.statusChange.create({ data: { entityType: "Project", entityId: projectId, projectId, fromStatus: access.project.status, toStatus: status, actorId: user.id, comment } }),
-  ]);
+  const reopen = access.project.status === "COMPLETED" && status === "ACTIVE";
+  await db.$transaction(async (tx) => {
+    await tx.project.update({ where: { id: projectId }, data: { status } });
+    await tx.statusChange.create({ data: { entityType: "Project", entityId: projectId, projectId, fromStatus: access.project.status, toStatus: status, actorId: user.id, comment } });
+    // Возобновление завершённого проекта: таймер снова считает срок (состояние пересчитает воркер)
+    if (reopen) await tx.timer.updateMany({ where: { projectId, startedAt: { not: null } }, data: { completedAt: null, state: "running" } });
+  });
   await audit({ actorId: user.id, action: "project.update", entityType: "Project", entityId: projectId, projectId, meta: { status, comment } });
   await notify([access.info.customerId, ...access.info.memberIds], "status.changed", `Статус проекта №${access.project.number} изменён`, comment, `/cabinet/projects/${projectId}`, { exceptUserId: user.id });
+}
+
+/**
+ * Досрочное завершение проекта на любой стадии (РП проекта или директор).
+ * Этапы остаются как есть — в истории видно, на какой стадии проект закрыт.
+ * Таймер останавливается, открытые паузы и запросы заказчику закрываются.
+ */
+export async function completeProject(user: SessionUser, projectId: string, comment: string) {
+  const access = await loadProjectAccess(user, projectId);
+  if (!access.canManage) throw new ForbiddenError("Завершить проект может руководитель проекта или директор");
+  if (access.project.status === "COMPLETED") throw new UserError("Проект уже завершён");
+  if (comment.trim().length < 3) throw new UserError("Укажите основание завершения");
+  const current = await db.projectStage.findFirst({ where: { projectId, status: { notIn: ["not_started", "completed"] } }, orderBy: { order: "asc" } });
+  const note = current ? `${comment} (завершён на этапе «${current.title}»)` : comment;
+  const now = new Date();
+  await db.$transaction(async (tx) => {
+    await tx.project.update({ where: { id: projectId }, data: { status: "COMPLETED" } });
+    await tx.statusChange.create({ data: { entityType: "Project", entityId: projectId, projectId, fromStatus: access.project.status, toStatus: "COMPLETED", actorId: user.id, comment: note } });
+    const timer = await tx.timer.findUnique({ where: { projectId } });
+    if (timer && !timer.completedAt) {
+      await tx.timerPause.updateMany({ where: { timerId: timer.id, endedAt: null }, data: { endedAt: now, resumedById: user.id, resumeNote: "Проект завершён" } });
+      await tx.timer.update({ where: { id: timer.id }, data: { completedAt: now, state: "completed" } });
+    }
+    await tx.customerRequest.updateMany({ where: { projectId, status: "OPEN" }, data: { status: "CANCELLED" } });
+  });
+  await audit({ actorId: user.id, action: "project.complete", entityType: "Project", entityId: projectId, projectId, meta: { comment: note, early: true } });
+  await notify([access.info.customerId, ...access.info.memberIds], "status.changed", `Проект №${access.project.number} завершён`, note, `/cabinet/projects/${projectId}`, { exceptUserId: user.id });
 }
 
 // ---------- Комментарии и запросы ----------

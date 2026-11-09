@@ -6,7 +6,8 @@ import { ForbiddenError } from "@/domain/rbac";
 import { UserError } from "@/lib/errors";
 import { createLead, changeLeadStatus } from "@/services/leads";
 import { acceptContract, createLeadContract, requestContractOtp } from "@/services/contracts";
-import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam } from "@/services/projects";
+import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject } from "@/services/projects";
+import { createManualProject } from "@/services/customers";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
 import { saveGenerated } from "@/services/files";
@@ -210,9 +211,57 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     expect((await db.quickOrder.findUniqueOrThrow({ where: { id: qo.id } })).status).toBe("COMPLETED");
   });
 
+  it("ручное заведение заказчика: реквизиты, договор, проектировщик; подписание в кабинете запускает таймер; досрочное завершение", async () => {
+    const base = {
+      customer: { name: "Иванов Иван", email: "manual@t.ru", phone: "+79000000000", position: "Директор" },
+      company: { name: "ООО «Ромашка»", inn: "4800000001", kpp: "480001001", ogrn: "1024800000001", legalAddress: "г. Липецк", bankDetails: "АО «Банк», БИК 044525000", phone: "" },
+      project: { title: "Навес склада", objectType: "Навес", address: "Липецк", description: "", amount: 150000, termDays: 20, startedAt: null, contractNumber: "", contractSigned: false, briefApproved: true },
+      team: { managerId: null, designerId: designer.id, fee: 50000, advance: 10000 },
+      invite: true,
+    };
+    // Проектировщик не может заводить заказчиков; некорректный ИНН — ошибка поля
+    await expect(createManualProject(designer, base)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(createManualProject(sales, { ...base, company: { ...base.company, inn: "123" } })).rejects.toBeInstanceOf(UserError);
+
+    const { project, invited } = await createManualProject(sales, base);
+    expect(invited).toBe(true);
+    const cust = await db.user.findUniqueOrThrow({ where: { email: "manual@t.ru" }, include: { company: true } });
+    expect(cust.role).toBe("CUSTOMER");
+    expect(cust.company?.inn).toBe("4800000001");
+    const contract = await db.contract.findFirstOrThrow({ where: { projectId: project.id } });
+    expect(contract.amount).toBe(150000);
+    expect(contract.status).toBe("AWAITING_SIGNATURE");
+    expect((await db.contractVersion.findFirstOrThrow({ where: { contractId: contract.id } })).body).toContain("ИНН 4800000001");
+    expect(await db.projectMember.findFirst({ where: { projectId: project.id, userId: designer.id, fee: 50000 } })).not.toBeNull();
+    expect((await db.timer.findUniqueOrThrow({ where: { projectId: project.id } })).startedAt).toBeNull();
+    // Менеджер видит свой проект; повторное использование номера договора запрещено
+    await expect(loadProjectAccess(sales, project.id)).resolves.toBeTruthy();
+    await expect(createManualProject(sales, { ...base, project: { ...base.project, contractNumber: contract.number } })).rejects.toBeInstanceOf(UserError);
+
+    // Заказчик подписывает договор в кабинете → таймер стартует
+    await db.user.update({ where: { id: cust.id }, data: { status: "ACTIVE" } });
+    const custUser = cust as unknown as SessionUser;
+    await requestContractOtp(custUser, contract.id);
+    await acceptContract(custUser, contract.id, await lastOtp("manual@t.ru"), true, null, null);
+    expect((await db.timer.findUniqueOrThrow({ where: { projectId: project.id } })).state).toBe("running");
+
+    // РП завершает проект досрочно: нужен доступ руководителя и основание; таймер останавливается, запросы закрываются
+    await assignTeam(director, project.id, pm.id, [designer.id]);
+    await createCustomerRequest(pm, project.id, "Пришлите фото", "sketch", true);
+    await expect(completeProject(designer, project.id, "Готово")).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(completeProject(pm, project.id, "")).rejects.toBeInstanceOf(UserError);
+    await completeProject(pm, project.id, "Заказчик принял работу на этапе эскиза");
+    const done = await db.project.findUniqueOrThrow({ where: { id: project.id }, include: { timer: { include: { pauses: true } }, requests: true } });
+    expect(done.status).toBe("COMPLETED");
+    expect(done.timer?.state).toBe("completed");
+    expect(done.timer?.pauses.every((p) => p.endedAt)).toBe(true);
+    expect(done.requests.every((r) => r.status !== "OPEN")).toBe(true);
+    await expect(completeProject(pm, project.id, "Повторно")).rejects.toBeInstanceOf(UserError);
+  });
+
   it("журнал фиксирует критичные действия", async () => {
     const actions = new Set((await db.auditEvent.findMany({ select: { action: true } })).map((a) => a.action));
-    for (const a of ["lead.create", "contract.accept", "lead.convert", "timer.pause", "timer.resume", "stage.transition", "payment.webhook", "payment.status"]) {
+    for (const a of ["lead.create", "contract.accept", "lead.convert", "timer.pause", "timer.resume", "stage.transition", "payment.webhook", "payment.status", "customer.create", "project.complete"]) {
       expect(actions.has(a), a).toBe(true);
     }
     void director;

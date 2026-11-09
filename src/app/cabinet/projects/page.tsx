@@ -42,14 +42,19 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         title="Проекты"
         subtitle={user.role === "DESIGNER" ? "Проекты, на которые вы назначены" : user.role === "CUSTOMER" ? "Ваши проекты" : "Все проекты компании"}
         actions={
-          can(user.role, "data.export") && (
-            <>
-              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- скачивание файла из API, не переход по странице */}
+          <>
+            {can(user.role, "projects.create") && (
+              <Link href="/cabinet/projects/new" className={btnClass("primary", "sm")}>
+                Новый заказчик и проект
+              </Link>
+            )}
+            {can(user.role, "data.export") && (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages -- скачивание файла из API, не переход по странице
               <a href="/api/export/projects" className={btnClass("secondary", "sm")}>
                 Выгрузить CSV
               </a>
-            </>
-          )
+            )}
+          </>
         }
       />
       <form className="mb-5 grid gap-3 sm:grid-cols-[2fr_1fr_auto]" role="search">

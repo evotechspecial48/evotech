@@ -20,6 +20,7 @@ import * as specs from "@/services/specs";
 import * as stages from "@/services/stages";
 import * as timer from "@/services/timer";
 import * as contracts from "@/services/contracts";
+import * as customers from "@/services/customers";
 import * as payments from "@/services/payments";
 import * as quick from "@/services/quick-orders";
 import * as aiJobs from "@/services/ai-jobs";
@@ -206,6 +207,54 @@ export async function projectStatusAction(_: ActionState, fd: FormData): Promise
     const user = await actor("projects.manage");
     await projects.setProjectStatus(user, str(fd, "projectId"), str(fd, "status") as "ACTIVE" | "ON_HOLD" | "CANCELLED", str(fd, "comment", 500));
     return { ok: true, message: "Статус проекта изменён" };
+  });
+}
+
+export async function createManualProjectAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("projects.create");
+    const digits = (key: string) => str(fd, key, 20).replace(/\s/g, "");
+    const startedAt = str(fd, "startedAt");
+    const { project } = await customers.createManualProject(user, {
+      customer: { name: str(fd, "customerName", 120), email: str(fd, "email", 200), phone: str(fd, "phone", 30), position: str(fd, "position", 120) },
+      company: {
+        name: str(fd, "companyName", 200),
+        inn: digits("inn"),
+        kpp: digits("kpp"),
+        ogrn: digits("ogrn"),
+        legalAddress: str(fd, "legalAddress", 500),
+        bankDetails: str(fd, "bankDetails", 1000),
+        phone: str(fd, "companyPhone", 30),
+      },
+      project: {
+        title: str(fd, "title", 200),
+        objectType: str(fd, "objectType", 100),
+        address: str(fd, "address", 300),
+        description: str(fd, "description", 4000),
+        amount: Math.round(num(fd, "amount") ?? 0),
+        termDays: Math.round(num(fd, "termDays") ?? 0),
+        startedAt: startedAt ? new Date(`${startedAt}T09:00:00+03:00`) : null,
+        contractNumber: str(fd, "contractNumber", 60),
+        contractSigned: fd.get("contractSigned") === "on",
+        briefApproved: fd.get("briefApproved") === "on",
+      },
+      team: {
+        managerId: str(fd, "managerId") || null,
+        designerId: str(fd, "designerId") || null,
+        fee: num(fd, "fee"),
+        advance: num(fd, "advance"),
+      },
+      invite: fd.get("invite") === "on",
+    });
+    return { ok: true, message: `Проект №${project.number} создан`, data: { redirect: `/cabinet/projects/${project.id}` } };
+  });
+}
+
+export async function completeProjectAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("projects.manage");
+    await projects.completeProject(user, str(fd, "projectId"), str(fd, "comment", 500));
+    return { ok: true, message: "Проект завершён" };
   });
 }
 

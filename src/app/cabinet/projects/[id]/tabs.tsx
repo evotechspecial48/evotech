@@ -8,10 +8,12 @@ import { availableActions, STAGES, type StageStatusT } from "@/domain/stage";
 import { formatDuration } from "@/domain/timer";
 import type { loadProjectAccess } from "@/services/scope";
 import { CUSTOMER_VISIBLE_VERSION, customerSeesVersion, verifyVersionIntegrity } from "@/services/stages";
+import { requisitesLine } from "@/services/customers";
 import {
   answerRequestAction,
   assignTeamAction,
   cancelRequestAction,
+  completeProjectAction,
   createRequestAction,
   deletePauseAction,
   projectCommentAction,
@@ -158,6 +160,8 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
           <DefList
             items={[
               ["Заказчик", `${project.customer.name}${project.customer.company ? `, ${project.customer.company.name}` : ""}`],
+              // Реквизиты заказчика — для сотрудников
+              ...(user.role !== "CUSTOMER" && requisitesLine(project.customer.company) ? ([["Реквизиты заказчика", requisitesLine(project.customer.company)], ["Контакты заказчика", [project.customer.email, project.customer.phone].filter(Boolean).join(", ")]] as [string, string][]) : []),
               ["Руководитель проекта", project.manager?.name ?? "не назначен"],
               ["Менеджер проектов", project.salesManager?.name],
               ["Проектировщики", project.members.map((m) => m.user.name).join(", ") || "не назначены"],
@@ -232,6 +236,16 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
                 Изменить
               </SubmitButton>
             </ActionForm>
+            {project.status !== "COMPLETED" && (
+              <ActionForm action={completeProjectAction} className="mt-4 flex flex-wrap items-end gap-2 border-t border-line pt-4">
+                <input type="hidden" name="projectId" value={projectId} />
+                <p className="w-full text-sm text-muted">Завершить проект на текущей стадии: таймер остановится, открытые запросы заказчику закроются. Незавершённые этапы останутся в истории.</p>
+                <input name="comment" required minLength={3} placeholder="Основание завершения" className={`${fieldClass} sm:max-w-xs`} aria-label="Основание завершения" />
+                <ConfirmSubmit title="Завершить проект?" text="Проект получит статус «Завершён», таймер остановится. При необходимости проект можно вернуть в работу." confirmText="Завершить" variant="primary">
+                  Завершить проект
+                </ConfirmSubmit>
+              </ActionForm>
+            )}
           </Card>
         )}
       </div>

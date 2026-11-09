@@ -156,7 +156,7 @@ export function ConfirmSubmit({
       <button type="button" className={btnClass(variant === "danger" ? "secondary" : variant, size)} onClick={() => ref.current?.showModal()} disabled={pending}>
         {children}
       </button>
-      <dialog ref={ref} className="w-[min(92vw,440px)] rounded-xl border border-line p-0 shadow-xl backdrop:bg-steel-900/40" aria-labelledby="confirm-title">
+      <dialog ref={ref} className="m-auto w-[min(92vw,440px)] rounded-xl border border-line p-0 shadow-xl backdrop:bg-steel-900/40" aria-labelledby="confirm-title">
         <div className="p-5">
           <h2 id="confirm-title" className="text-lg font-semibold">
             {title}

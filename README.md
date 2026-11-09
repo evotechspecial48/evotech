@@ -20,7 +20,7 @@
 
 ```bash
 npm install
-cp .env.example .env            # затем задайте APP_SECRET (openssl rand -hex 32)
+npm run setup:env               # .env из .env.example со случайным APP_SECRET
 npm run db:up                   # PostgreSQL :5432 и Mailpit :8025/:1025
 npx prisma migrate deploy       # применить миграции
 npm run db:seed                 # демо-данные (пересоздаёт все данные в БД!)
@@ -75,6 +75,7 @@ npm run db:seed                 # по желанию: демо-данные (с
 
 ## Документация
 
+- [docs/SETUP.md](docs/SETUP.md) — запуск на другом устройстве, где что править, обновление сервера
 - [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — полная спецификация: блоки сайта, модули кабинета, процессы, данные, инфраструктура
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — архитектура, модули, модель данных, безопасность
 - [docs/RBAC.md](docs/RBAC.md) — матрица ролей и разрешений

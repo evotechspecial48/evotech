@@ -56,6 +56,8 @@ export const AUDIT_LABELS: Record<string, string> = {
   "project.create": "Создание проекта",
   "project.assign": "Назначение участников",
   "project.update": "Изменение проекта",
+  "project.complete": "Завершение проекта",
+  "customer.create": "Заказчик заведён вручную",
   "stage.transition": "Изменение статуса этапа",
   "stage.version": "Новая версия результата",
   "request.create": "Запрос заказчику",
