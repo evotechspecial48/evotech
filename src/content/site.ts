@@ -9,9 +9,7 @@ export const COMPANY = {
   phoneHref: "tel:+79202401945",
   whatsapp: "https://wa.me/79202401945",
   telegram: "https://t.me/+79202401945",
-  // MAX: прямой ссылки по номеру у мессенджера нет — ведём на max.ru, номер для поиска показан рядом.
-  // Точную ссылку на профиль (MAX → Профиль → Поделиться) можно подставить сюда.
-  max: "https://max.ru/",
+  max: "https://max.ru/u/f9LHodD0cOKrdRGzz0F1q7PxcTzIwHetLhmP-xIG1bXYXKY4TUaY3WpV3zk",
   vk: "https://vk.ru/evotech48",
   email: "evotechnology@mail.ru",
   city: "Липецк",

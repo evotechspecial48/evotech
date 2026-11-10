@@ -15,7 +15,8 @@ TOKEN="${TOKEN//[[:space:]]/}"
 if [ -z "$TOKEN" ]; then echo "Токен не введён — ничего не изменено."; exit 1; fi
 
 # Проверка токена: запрос информации о несуществующей QR-ссылке. 404 — токен принят, 401/403 — нет доступа.
-CODE=$(curl -s --max-time 25 -o /dev/null -w "%{http_code}" -K - "$URL/api/v1/b2b/qr/00000000-0000-0000-0000-000000000000/info" <<<"header = \"Authorization: Bearer $TOKEN\"")
+# Сертификат API выдан НУЦ Минцифры — проверяем по связке из deploy/certs
+CODE=$(curl -s --cacert /opt/evotech/deploy/certs/russian-trusted-ca.pem --max-time 25 -o /dev/null -w "%{http_code}" -K - "$URL/api/v1/b2b/qr/00000000-0000-0000-0000-000000000000/info" <<<"header = \"Authorization: Bearer $TOKEN\"")
 case "$CODE" in
   200|404|400|422) ;;
   401|403) echo "Т-Бизнес: токен не принят или нет доступа «Выставление ссылок через СБП» (HTTP $CODE). Ничего не изменено."; exit 1 ;;
