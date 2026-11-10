@@ -123,7 +123,7 @@ export async function previewLeadContract(user: SessionUser, leadId: string, amo
   const vars = await contractVars({
     number: "(будет присвоен)",
     customerName: lead.contactName,
-    customerEmail: lead.email,
+    customerEmail: lead.email ?? "",
     customerPhone: lead.phone,
     companyName: lead.companyName,
     subject: lead.title,
@@ -141,9 +141,12 @@ export async function createLeadContract(user: SessionUser, leadId: string, amou
   if (["won", "lost"].includes(lead.status)) throw new UserError("Заявка закрыта");
   const open = await db.contract.findFirst({ where: { leadId, status: { in: ["AWAITING_SIGNATURE", "SIGNED"] } } });
   if (open) throw new UserError(`По заявке уже есть договор ${open.number}. Измените его или аннулируйте.`);
+  // Почта нужна для приглашения в кабинет и кода подписания
+  const email = lead.email;
+  if (!email) throw new UserError("Укажите почту заказчика в контактах заявки — на неё придут приглашение в кабинет и код подписания договора");
   let customerId = lead.customerId;
   if (!customerId) {
-    const { user: customer } = await inviteUser(user, { email: lead.email, name: lead.contactName, role: "CUSTOMER", phone: lead.phone ?? undefined });
+    const { user: customer } = await inviteUser(user, { email, name: lead.contactName, role: "CUSTOMER", phone: lead.phone ?? undefined });
     customerId = customer.id;
     await db.lead.update({ where: { id: leadId }, data: { customerId } });
   }
@@ -151,7 +154,7 @@ export async function createLeadContract(user: SessionUser, leadId: string, amou
   const number = await nextNumber("Д");
   const body = renderTemplate(
     tpl.body,
-    await contractVars({ number, customerName: lead.contactName, customerEmail: lead.email, customerPhone: lead.phone, companyName: lead.companyName, subject: lead.title, amount, termDays }),
+    await contractVars({ number, customerName: lead.contactName, customerEmail: email, customerPhone: lead.phone, companyName: lead.companyName, subject: lead.title, amount, termDays }),
   );
   const contract = await db.$transaction(async (tx) => {
     const c = await createContractTx(tx, { number, customerId: customerId!, amount, termDays, body, templateId: tpl.id, leadId, createdById: user.id });
@@ -171,7 +174,7 @@ export async function reviseContract(user: SessionUser, contractId: string, body
   if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
   const contract = await db.contract.findUnique({ where: { id: contractId } });
   if (!contract) throw new NotFoundError("Договор");
-  if (contract.status === "SIGNED") throw new UserError("Подписанный договор изменить нельзя — оформите дополнительное соглашение");
+  // Правка подписанного договора — новая редакция, заказчик подписывает её заново; прежняя подпись остаётся в истории
   if (contract.status === "CANCELLED") throw new UserError("Договор аннулирован");
   if (body.trim().length < 50) throw new UserError("Текст договора слишком короткий");
   const version = contract.currentVersion + 1;
@@ -252,7 +255,13 @@ export async function acceptContract(user: SessionUser, contractId: string, code
     const project = await db.project.findUnique({ where: { id: contract.projectId }, select: { number: true, managerId: true, salesManagerId: true } });
     await notify([project?.managerId, project?.salesManagerId], "status.changed", `Заказчик подписал договор ${contract.number}`, `Проект №${project?.number}: таймер срока запущен.`, `/cabinet/projects/${contract.projectId}`);
   } else if (contract.leadId) {
-    const lead = await db.lead.findUnique({ where: { id: contract.leadId }, select: { managerId: true, number: true } });
+    const lead = await db.lead.findUnique({ where: { id: contract.leadId }, select: { managerId: true, number: true, status: true } });
+    if (lead && !["won", "lost", "contract_signed"].includes(lead.status)) {
+      await db.$transaction([
+        db.lead.update({ where: { id: contract.leadId }, data: { status: "contract_signed" } }),
+        db.statusChange.create({ data: { entityType: "Lead", entityId: contract.leadId, fromStatus: lead.status, toStatus: "contract_signed", actorId: user.id, comment: `Договор ${contract.number} подписан в кабинете` } }),
+      ]);
+    }
     await notify([lead?.managerId], "status.changed", `Заказчик подписал договор ${contract.number}`, `Заявка №${lead?.number}. Можно создавать проект.`, `/cabinet/leads/${contract.leadId}`);
   }
 }

@@ -12,17 +12,20 @@ interface Row {
   price: number;
 }
 
-/** Конструктор коммерческого предложения: позиции, итог, срок, срок действия. */
-export function OfferBuilder({ leadId }: { leadId: string }) {
-  const [rows, setRows] = useState<Row[]>([
-    { title: "Разработка КМ", qty: 1, unit: "компл.", price: 0 },
-    { title: "Разработка КМД", qty: 1, unit: "компл.", price: 0 },
-  ]);
+/** Конструктор коммерческого предложения: позиции, итог, срок, срок действия. С offer — правка существующего КП. */
+export function OfferBuilder({ leadId, offer }: { leadId: string; offer?: { id: string; items: Row[]; termDays: number; validDays: number; notes: string | null } }) {
+  const [rows, setRows] = useState<Row[]>(
+    offer?.items ?? [
+      { title: "Разработка КМ", qty: 1, unit: "компл.", price: 0 },
+      { title: "Разработка КМД", qty: 1, unit: "компл.", price: 0 },
+    ],
+  );
   const total = rows.reduce((s, r) => s + (r.qty || 0) * (r.price || 0), 0);
   const set = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   return (
-    <ActionForm action={createOfferAction} className="space-y-3" successMessage="КП сформировано">
+    <ActionForm action={createOfferAction} className="space-y-3">
       <input type="hidden" name="leadId" value={leadId} />
+      {offer && <input type="hidden" name="offerId" value={offer.id} />}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
@@ -65,11 +68,11 @@ export function OfferBuilder({ leadId }: { leadId: string }) {
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-sm">
           <span className="mb-1 block text-xs text-muted">Срок, раб. дн.</span>
-          <input name="termDays" type="number" min={1} defaultValue={15} className={fieldClass} />
+          <input name="termDays" type="number" min={1} defaultValue={offer?.termDays ?? 15} className={fieldClass} />
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-xs text-muted">Действует, дн.</span>
-          <input name="validDays" type="number" min={1} defaultValue={14} className={fieldClass} />
+          <input name="validDays" type="number" min={1} defaultValue={offer?.validDays ?? 14} className={fieldClass} />
         </label>
         <div className="text-sm">
           <span className="mb-1 block text-xs text-muted">Итого</span>
@@ -78,9 +81,9 @@ export function OfferBuilder({ leadId }: { leadId: string }) {
       </div>
       <label className="block text-sm">
         <span className="mb-1 block text-xs text-muted">Примечания</span>
-        <textarea name="notes" rows={2} className={fieldClass} />
+        <textarea name="notes" rows={2} defaultValue={offer?.notes ?? ""} className={fieldClass} />
       </label>
-      <SubmitButton>Сформировать КП</SubmitButton>
+      <SubmitButton>{offer ? "Сохранить изменения" : "Сформировать КП"}</SubmitButton>
     </ActionForm>
   );
 }

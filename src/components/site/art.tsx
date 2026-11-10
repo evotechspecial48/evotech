@@ -34,33 +34,3 @@ export function HeroFrame() {
     </svg>
   );
 }
-
-export function WorkPlaceholder({ seed, label }: { seed: number; label: string }) {
-  const h = 60 + (seed % 3) * 18;
-  const spans = 3 + (seed % 3);
-  return (
-    <svg viewBox="0 0 320 180" className="h-full w-full" role="img" aria-label={label}>
-      <rect width="320" height="180" fill="#eef3f8" />
-      <g stroke="#c9d3dd" strokeWidth="1">
-        {Array.from({ length: 16 }, (_, i) => (
-          <line key={`v${i}`} x1={i * 20} y1="0" x2={i * 20} y2="180" />
-        ))}
-        {Array.from({ length: 9 }, (_, i) => (
-          <line key={`h${i}`} x1="0" y1={i * 20} x2="320" y2={i * 20} />
-        ))}
-      </g>
-      <g stroke="#0b3a63" strokeWidth="3" fill="none">
-        <line x1="30" y1="150" x2="290" y2="150" stroke="#8696a6" strokeDasharray="6 4" strokeWidth="1.5" />
-        {Array.from({ length: spans + 1 }, (_, i) => {
-          const x = 40 + (240 / spans) * i;
-          return <line key={i} x1={x} y1="150" x2={x} y2={150 - h} stroke="#202426" strokeWidth="4" />;
-        })}
-        <polyline points={`40,${150 - h} 160,${150 - h - 30} 280,${150 - h}`} />
-        {Array.from({ length: spans }, (_, i) => {
-          const x = 40 + (240 / spans) * i;
-          return <line key={`d${i}`} x1={x} y1="150" x2={x + 240 / spans} y2={150 - h} stroke="#e8590c" strokeWidth="1.5" />;
-        })}
-      </g>
-    </svg>
-  );
-}

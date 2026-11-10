@@ -7,6 +7,7 @@ import { CONTRACT_STATUS, LEAD_SOURCE, LEAD_STATUS, OFFER_STATUS, SPEC_STATUS } 
 import { loadLeadAccess } from "@/services/scope";
 import {
   convertLeadAction,
+  deleteLeadAction,
   ensureSpecAction,
   leadAssignAction,
   leadCommentAction,
@@ -14,8 +15,9 @@ import {
   leadTaskAction,
   offerStatusAction,
   toggleTaskAction,
+  updateLeadContactsAction,
 } from "@/app/actions/cabinet";
-import { ActionForm, FileUploader, SubmitButton } from "@/components/client";
+import { ActionForm, ConfirmSubmit, FieldError, FileUploader, SubmitButton } from "@/components/client";
 import { CommentList, FileList, History } from "@/components/cabinet/shared";
 import { ContractCreator, OfferBuilder } from "@/components/cabinet/lead-widgets";
 import { Alert, btnClass, Card, DefList, fieldClass, fmtDate, fmtDateTime, PageHeader, rub, StatusBadge } from "@/components/ui";
@@ -77,7 +79,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               items={[
                 ["Контактное лицо", lead.contactName],
                 ["Компания", lead.companyName],
-                ["Почта", lead.email],
+                ["Почта", lead.email ?? (isCustomer ? null : "не указана — нужна для договора")],
                 ["Телефон", lead.phone],
                 ["Тип объекта", lead.objectType],
                 ["Бюджет", lead.budget],
@@ -93,6 +95,22 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               ]}
             />
             {lead.description && <p className="mt-4 whitespace-pre-wrap rounded-lg bg-steel-50 p-3 text-sm">{lead.description}</p>}
+            {manage && lead.status !== "won" && (
+              <details className="mt-4 rounded-lg border border-line p-3">
+                <summary className="cursor-pointer text-sm font-medium">Изменить контакты</summary>
+                <ActionForm action={updateLeadContactsAction} className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <input type="hidden" name="leadId" value={lead.id} />
+                  <Field name="title" label="Что нужно спроектировать *" defaultValue={lead.title} className="sm:col-span-2" />
+                  <Field name="contactName" label="Контактное лицо *" defaultValue={lead.contactName} />
+                  <Field name="companyName" label="Компания" defaultValue={lead.companyName ?? ""} />
+                  <Field name="email" label="Почта" type="email" defaultValue={lead.email ?? ""} />
+                  <Field name="phone" label="Телефон" defaultValue={lead.phone ?? ""} />
+                  <div className="sm:col-span-2">
+                    <SubmitButton size="sm">Сохранить</SubmitButton>
+                  </div>
+                </ActionForm>
+              </details>
+            )}
           </Card>
 
           <Card
@@ -145,6 +163,17 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                         </>
                       )}
                     </div>
+                    {can(user.role, "offers.manage") && o.status !== "ACCEPTED" && (
+                      <details className="w-full rounded-lg border border-line p-3">
+                        <summary className="cursor-pointer text-sm">Изменить КП</summary>
+                        <div className="mt-3">
+                          <OfferBuilder
+                            leadId={lead.id}
+                            offer={{ id: o.id, items: o.items as unknown as { title: string; qty: number; unit: string; price: number }[], termDays: o.termDays, validDays: Math.max(1, Math.round((o.validUntil.getTime() - Date.now()) / 86400_000)), notes: o.notes }}
+                          />
+                        </div>
+                      </details>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -231,7 +260,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                 </label>
                 <select id="status" name="status" defaultValue={lead.status} className={fieldClass}>
                   {Object.entries(LEAD_STATUS)
-                    .filter(([k]) => k !== "won")
+                    .filter(([k]) => k !== "won" && k !== "qualification")
                     .map(([k, v]) => (
                       <option key={k} value={k}>
                         {v.label}
@@ -262,6 +291,18 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                   Назначить
                 </SubmitButton>
               </ActionForm>
+              {!lead.project && (
+                <ActionForm action={deleteLeadAction} className="mt-5 space-y-2 border-t border-line pt-4">
+                  <input type="hidden" name="leadId" value={lead.id} />
+                  <label htmlFor="deleteReason" className="block text-xs text-muted">
+                    Удаление ошибочной или неактуальной заявки
+                  </label>
+                  <input id="deleteReason" name="reason" required minLength={3} placeholder="Причина удаления" className={fieldClass} />
+                  <ConfirmSubmit title="Удалить заявку?" text="Заявка, её КП, ТЗ, комментарии, задачи, файлы и неподписанный договор будут удалены без возможности восстановления. В журнале останется запись об удалении.">
+                    Удалить заявку
+                  </ConfirmSubmit>
+                </ActionForm>
+              )}
             </Card>
           )}
           {!isCustomer && (
@@ -318,5 +359,17 @@ function OfferBtn({ id, status, label, variant = "primary" }: { id: string; stat
         {label}
       </SubmitButton>
     </ActionForm>
+  );
+}
+
+function Field({ name, label, type = "text", defaultValue, className }: { name: string; label: string; type?: string; defaultValue: string; className?: string }) {
+  return (
+    <div className={className}>
+      <label htmlFor={`lead-${name}`} className="mb-1 block text-xs text-muted">
+        {label}
+      </label>
+      <input id={`lead-${name}`} name={name} type={type} defaultValue={defaultValue} className={fieldClass} />
+      <FieldError name={name} />
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ForbiddenError } from "@/domain/rbac";
 import { UserError } from "@/lib/errors";
-import { createLead, changeLeadStatus } from "@/services/leads";
+import { createLead, changeLeadStatus, createOffer, deleteLead, updateLeadContacts, updateOffer } from "@/services/leads";
 import { acceptContract, createLeadContract, requestContractOtp } from "@/services/contracts";
 import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject } from "@/services/projects";
 import { createManualProject } from "@/services/customers";
@@ -78,7 +78,7 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     const lead = await createLead({ title: "Каркас склада", contactName: "Заказчик", email: "cust@t.ru", source: "site_form", utm: { utm_source: "yandex" } }, null, "127.0.0.1");
     expect(lead.managerId).toBe(sales.id); // автоназначение менеджера
     expect(lead.customerId).toBe(customer.id); // привязка по почте
-    await changeLeadStatus(sales, lead.id, "qualification", "");
+    await changeLeadStatus(sales, lead.id, "tz_preparation", "");
 
     await expect(convertLeadToProject(sales, lead.id, pm.id)).rejects.toBeInstanceOf(UserError); // без подписанного договора нельзя
     const contract = await createLeadContract(sales, lead.id, 150000, 20);
@@ -89,6 +89,8 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     await expect(acceptContract(customer, contract.id, "000000", true, "1.1.1.1", "ua")).rejects.toBeInstanceOf(UserError);
     await expect(acceptContract(customer, contract.id, await lastOtp("cust@t.ru"), false, "1.1.1.1", "ua")).rejects.toBeInstanceOf(UserError); // без согласия
     await acceptContract(customer, contract.id, await lastOtp("cust@t.ru"), true, "1.1.1.1", "ua");
+    // Подписание в кабинете переводит заявку в «Договор подписан»
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("contract_signed");
     const acc = await db.contractAcceptance.findFirstOrThrow({ where: { contractId: contract.id } });
     expect(acc.ip).toBe("1.1.1.1");
 
@@ -302,6 +304,34 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     expect((await db.payment.findUniqueOrThrow({ where: { id: final.id } })).amount).toBe((contract.amount - Math.round(contract.amount / 2)) * 100);
     await cancelInvoice(pm, final.id);
     expect((await db.payment.findUniqueOrThrow({ where: { id: final.id } })).status).toBe("cancelled");
+  });
+
+  it("заявка по телефону без почты: почта нужна только для договора; правка контактов, правка КП, удаление", async () => {
+    // Сайт и заказчик — только с почтой; сотрудник — можно без
+    await expect(createLead({ title: "Навес", contactName: "Иван", source: "site_form" }, null, null)).rejects.toBeInstanceOf(UserError);
+    const lead = await createLead({ title: "Нагрузки КМ", contactName: "ООО СМАРТ ЮГ", phone: "89785802000", source: "phone" }, sales, null);
+    expect(lead.email).toBeNull();
+    await expect(createLeadContract(sales, lead.id, 35000, 10)).rejects.toThrow(/почту заказчика/);
+
+    await updateLeadContacts(sales, lead.id, { title: "Нагрузки КМ", contactName: "Пётр Смирнов", email: "Smart@Yug.ru", phone: "89785802000", companyName: "ООО СМАРТ ЮГ" });
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).email).toBe("smart@yug.ru");
+
+    const offer = await createOffer(sales, lead.id, [{ title: "КМ", qty: 1, unit: "компл.", price: 30000 }], 10, 14, "");
+    await updateOffer(sales, offer.id, [{ title: "КМ", qty: 1, unit: "компл.", price: 30000 }, { title: "Расчёт нагрузок", qty: 1, unit: "компл.", price: 5000 }], 12, 10, "Уточнено");
+    const edited = await db.commercialOffer.findUniqueOrThrow({ where: { id: offer.id } });
+    expect([edited.total, edited.termDays, edited.version]).toEqual([35000, 12, offer.version + 1]);
+
+    // Неподписанный договор удаляется вместе с заявкой; проектировщик удалять не может
+    await createLeadContract(sales, lead.id, 35000, 12);
+    await expect(deleteLead(designer, lead.id, "ошибка")).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(deleteLead(sales, lead.id, "")).rejects.toBeInstanceOf(UserError);
+    await deleteLead(sales, lead.id, "Дубль заявки");
+    expect(await db.lead.findUnique({ where: { id: lead.id } })).toBeNull();
+    expect(await db.contract.count({ where: { leadId: lead.id } })).toBe(0);
+
+    // Заявку с проектом удалить нельзя
+    const withProject = await db.lead.findFirstOrThrow({ where: { project: { isNot: null } } });
+    await expect(deleteLead(director, withProject.id, "проверка")).rejects.toBeInstanceOf(UserError);
   });
 
   it("журнал фиксирует критичные действия", async () => {

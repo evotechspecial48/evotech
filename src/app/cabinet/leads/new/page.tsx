@@ -14,7 +14,7 @@ export default async function NewLeadPage() {
           {staff && (
             <>
               <L name="contactName" label="Контактное лицо *" />
-              <L name="email" label="Почта *" type="email" />
+              <L name="email" label="Почта" type="email" />
               <L name="phone" label="Телефон" />
               <L name="companyName" label="Компания" />
               <div>

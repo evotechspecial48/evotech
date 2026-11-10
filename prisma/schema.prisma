@@ -121,11 +121,11 @@ model RateLimit {
 
 enum LeadStatus {
   new
-  qualification
   tz_preparation
   commercial_offer
   contract_approval
   awaiting_signature
+  contract_signed
   won
   lost
 }
@@ -146,7 +146,7 @@ model Lead {
   number        Int        @unique @default(autoincrement())
   title         String
   contactName   String
-  email         String
+  email         String?
   phone         String?
   companyName   String?
   objectType    String?

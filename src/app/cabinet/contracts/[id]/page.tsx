@@ -92,9 +92,11 @@ export default async function ContractPage({ params, searchParams }: { params: P
               })}
             </ul>
           </Card>
-          {can(user.role, "contracts.manage") && contract.status !== "SIGNED" && contract.status !== "CANCELLED" && (
-            <Card title="Корректировка">
+          {can(user.role, "contracts.manage") && contract.status !== "CANCELLED" && (
+            <Card title="Редактирование договора">
               <ActionForm action={contractReviseAction} className="space-y-3">
+                {contract.status === "SIGNED" && <Alert tone="warning">Договор подписан. Правка создаст новую редакцию — заказчику придётся подписать её заново. Прежняя подпись сохранится в истории.</Alert>}
+                <p className="text-xs text-muted">Разметка: «# » — раздел, «^ » — строка по центру, строки «| … |» — таблица, «===» — новая страница.</p>
                 <input type="hidden" name="contractId" value={contract.id} />
                 <div className="grid grid-cols-2 gap-2">
                   <label className="text-sm">
@@ -108,7 +110,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
                 </div>
                 <label className="block text-sm">
                   <span className="mb-1 block text-xs text-muted">Текст новой редакции</span>
-                  <textarea name="body" rows={10} defaultValue={current.body} className={`${fieldClass} font-mono text-xs`} />
+                  <textarea name="body" rows={18} defaultValue={current.body} className={`${fieldClass} font-mono text-xs`} />
                 </label>
                 <SubmitButton size="sm">Создать новую редакцию</SubmitButton>
               </ActionForm>

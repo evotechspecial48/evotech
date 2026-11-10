@@ -353,7 +353,7 @@ async function importLeads(staff: Awaited<ReturnType<typeof upsertStaff>>, proje
     const amount = money(r.estimate);
     const perTon = amount !== null && amount < 10000;
     const statusText = [r.status, r.note].filter(Boolean).join("; ");
-    const status: LeadStatus = LOST.test(statusText) ? "lost" : r.contract ? "awaiting_signature" : WAITING.test(statusText) || amount ? "commercial_offer" : "qualification";
+    const status: LeadStatus = LOST.test(statusText) ? "lost" : r.contract ? "awaiting_signature" : WAITING.test(statusText) || amount ? "commercial_offer" : "new";
     const source: LeadSource = /авито/i.test(r.source) ? "avito" : "manual";
     const description = [
       `Импорт из таблицы учёта (журнал обращений, строка ${r.row}).`,

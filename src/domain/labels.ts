@@ -5,12 +5,14 @@ export type Tone = "neutral" | "info" | "progress" | "warning" | "success" | "da
 
 export const LEAD_STATUS: Record<string, { label: string; tone: Tone }> = {
   new: { label: "Новая", tone: "info" },
-  qualification: { label: "Квалификация", tone: "progress" },
   tz_preparation: { label: "Подготовка ТЗ", tone: "progress" },
   commercial_offer: { label: "Коммерческое предложение", tone: "progress" },
   contract_approval: { label: "Согласование договора", tone: "warning" },
   awaiting_signature: { label: "Ожидает подписания", tone: "warning" },
-  won: { label: "Договор заключён", tone: "success" },
+  contract_signed: { label: "Договор подписан", tone: "success" },
+  won: { label: "Проект создан", tone: "success" },
+  // Устаревший статус — только для истории изменений
+  qualification: { label: "Квалификация", tone: "progress" },
   lost: { label: "Отказ", tone: "danger" },
 };
 

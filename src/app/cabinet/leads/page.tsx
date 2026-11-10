@@ -65,11 +65,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <input id="q" name="q" defaultValue={q} placeholder="Поиск: №, тема, контакт, почта, компания" className={fieldClass} />
       <select name="status" defaultValue={status} className={fieldClass} aria-label="Статус">
         <option value="">Все статусы</option>
-        {Object.entries(LEAD_STATUS).map(([k, v]) => (
-          <option key={k} value={k}>
-            {v.label}
-          </option>
-        ))}
+        {Object.entries(LEAD_STATUS)
+          .filter(([k]) => k !== "qualification")
+          .map(([k, v]) => (
+            <option key={k} value={k}>
+              {v.label}
+            </option>
+          ))}
       </select>
       <select name="source" defaultValue={source} className={fieldClass} aria-label="Источник">
         <option value="">Все источники</option>

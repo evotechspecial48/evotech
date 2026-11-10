@@ -87,7 +87,7 @@ describe("Воронка заявок", () => {
     expect(checkLeadTransition("awaiting_signature", "won", { viaConversion: true }).ok).toBe(true);
   });
   it("из отказа — только в новую", () => {
-    expect(checkLeadTransition("lost", "qualification").ok).toBe(false);
+    expect(checkLeadTransition("lost", "tz_preparation").ok).toBe(false);
     expect(checkLeadTransition("lost", "new").ok).toBe(true);
   });
 });

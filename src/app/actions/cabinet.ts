@@ -55,6 +55,22 @@ export async function createLeadAction(_: ActionState, fd: FormData): Promise<Ac
   });
 }
 
+export async function updateLeadContactsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("leads.manage");
+    await leads.updateLeadContacts(user, str(fd, "leadId"), { title: str(fd, "title", 300), contactName: str(fd, "contactName", 120), email: str(fd, "email", 200), phone: str(fd, "phone", 30), companyName: str(fd, "companyName", 200) });
+    return { ok: true, message: "Контакты сохранены" };
+  });
+}
+
+export async function deleteLeadAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("leads.manage");
+    await leads.deleteLead(user, str(fd, "leadId"), str(fd, "reason", 300));
+    return { ok: true, message: "Заявка удалена", data: { redirect: "/cabinet/leads" } };
+  });
+}
+
 export async function leadStatusAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const user = await actor("leads.manage");
@@ -101,6 +117,11 @@ export async function createOfferAction(_: ActionState, fd: FormData): Promise<A
       unit: String(fd.getAll("itemUnit")[i] ?? "компл."),
       price: Number(String(fd.getAll("itemPrice")[i] ?? 0).replace(",", ".")),
     }));
+    const offerId = str(fd, "offerId");
+    if (offerId) {
+      await leads.updateOffer(user, offerId, items, num(fd, "termDays") ?? 0, num(fd, "validDays") ?? 14, str(fd, "notes", 2000));
+      return { ok: true, message: "Коммерческое предложение изменено" };
+    }
     await leads.createOffer(user, str(fd, "leadId"), items, num(fd, "termDays") ?? 0, num(fd, "validDays") ?? 14, str(fd, "notes", 2000));
     return { ok: true, message: "Коммерческое предложение сформировано" };
   });

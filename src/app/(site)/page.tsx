@@ -1,7 +1,8 @@
+import Image from "next/image";
 import Link from "next/link";
-import { ADVANTAGES, COMPANY, DELIVERABLES, FAQ, INDUSTRIES, INPUTS, SERVICES, SOFTWARE, STEPS, TRUST, WORKS } from "@/content/site";
+import { ADVANTAGES, COMPANY, DELIVERABLES, FAQ, INDUSTRIES, INPUTS, SERVICES, SOFTWARE, STEPS, TRUST, WORKS, CLIENTS } from "@/content/site";
 import { STAGES } from "@/domain/stage";
-import { HeroFrame, WorkPlaceholder } from "@/components/site/art";
+import { HeroFrame } from "@/components/site/art";
 import { Calculator } from "@/components/site/calculator";
 import { LeadForm } from "@/components/site/lead-form";
 import { btnClass } from "@/components/ui";
@@ -215,14 +216,14 @@ export default function HomePage() {
       {/* Примеры */}
       <Section id="works" eyebrow="Портфолио" title="Примеры выполненных работ" className="bg-surface">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {WORKS.slice(0, 6).map((w, i) => (
+          {WORKS.map((w) => (
             <article key={w.title} className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
-              <div className="aspect-[16/9] border-b border-line">
-                <WorkPlaceholder seed={i} label={`Схема объекта: ${w.title}`} />
-              </div>
+              <a href={w.image} target="_blank" rel="noopener" className="relative block aspect-[16/9] border-b border-line bg-steel-100" aria-label={`Открыть изображение: ${w.title}`}>
+                <Image src={w.image} alt={`${w.title}: ${w.text}`} fill sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" className="object-contain" />
+              </a>
               <div className="p-5">
                 <h3 className="font-semibold">{w.title}</h3>
-                <p className="mt-1 text-sm text-muted">{w.client}</p>
+                <p className="mt-1 text-sm text-muted">{w.text}</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {w.tags.map((t) => (
                     <span key={t} className="rounded bg-steel-100 px-2 py-0.5 text-xs text-steel-800">
@@ -234,7 +235,7 @@ export default function HomePage() {
             </article>
           ))}
         </div>
-        <p className="mt-4 text-xs text-muted">Фотографии объектов будут опубликованы после подтверждения прав на публикацию.</p>
+        <p className="mt-4 text-sm text-muted">Среди заказчиков: {CLIENTS.join(", ")}.</p>
       </Section>
 
       {/* Калькулятор */}

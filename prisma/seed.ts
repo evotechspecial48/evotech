@@ -94,7 +94,7 @@ async function main() {
       objectType: "Навес",
       source: "site_calculator",
       utm: { utm_source: "vk", utm_medium: "social" },
-      status: "qualification",
+      status: "tz_preparation",
       managerId: sales.id,
       createdAt: ago(3),
     },
