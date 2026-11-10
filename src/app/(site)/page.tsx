@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ADVANTAGES, COMPANY, DELIVERABLES, FAQ, INDUSTRIES, INPUTS, SERVICES, SOFTWARE, STEPS, TRUST, WORKS, CLIENTS } from "@/content/site";
 import { STAGES } from "@/domain/stage";
-import { HeroFrame } from "@/components/site/art";
+import { HeroGallery } from "@/components/site/hero-gallery";
 import { Calculator } from "@/components/site/calculator";
 import { LeadForm } from "@/components/site/lead-form";
 import { btnClass } from "@/components/ui";
@@ -62,14 +62,14 @@ export default function HomePage() {
 
       {/* Первый экран */}
       <section className="blueprint relative overflow-hidden text-white">
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:py-24">
-          <div>
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_1fr] lg:py-24">
+          <div className="min-w-0">
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#8fb4e0]">КМ · КМД · 3D · Расчёты</p>
-            <h1 className="mt-4 text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.4rem]">Проектирование металлоконструкций с прозрачными сроками</h1>
+            <h1 className="mt-4 text-[min(2rem,8.8vw)] font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-[3.4rem]">Проектирование металлоконструкций с прозрачными сроками</h1>
             <p className="mt-5 max-w-xl text-lg text-steel-200">
               Чертежи КМ и КМД, 3D-модели и расчёты — с личным кабинетом, где видно каждый этап, версию и остаток срока. Для небольших конструкций — быстрый заказ онлайн.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link href="#calc" className={btnClass("signal", "lg")}>
                 Рассчитать проект
               </Link>
@@ -86,9 +86,7 @@ export default function HomePage() {
               ))}
             </ul>
           </div>
-          <div className="relative">
-            <HeroFrame />
-          </div>
+          <HeroGallery />
         </div>
       </section>
 

@@ -3,8 +3,8 @@
 /* Дизайн-токены «ЭвоТех» по фирменному логотипу: графит #202426 и тёмно-синий #0A3457
    на светлом нейтральном фоне; контрастный оранжевый — только для главных действий. */
 @theme {
-  --font-sans: var(--font-plex), "Segoe UI", Roboto, Arial, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-sans: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --color-bg: #f4f6f8;
   --color-surface: #ffffff;
