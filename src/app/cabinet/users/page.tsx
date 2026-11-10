@@ -30,14 +30,21 @@ export default async function UsersPage() {
                 </td>
                 <td className="text-muted">{fmtDateTime(u.lastLoginAt)}</td>
                 <td>
-                  {u.id !== me.id && !u.anonymizedAt && (
+                  {!u.anonymizedAt && (
                     <details>
                       <summary className="cursor-pointer text-sm text-accent-700">Изменить</summary>
                       <div className="mt-2 w-72 space-y-3 rounded-lg border border-line bg-surface p-3">
                         <ActionForm action={updateUserAction} className="space-y-2">
                           <input type="hidden" name="userId" value={u.id} />
                           <input name="name" defaultValue={u.name} className={fieldClass} aria-label="Имя" />
-                          <select name="role" defaultValue={u.role} className={fieldClass} aria-label="Роль">
+                          <div>
+                            <input name="email" type="email" required defaultValue={u.email} className={fieldClass} aria-label="Почта (логин)" title="Почта (логин)" />
+                            <FieldError name="email" />
+                            <p className="mt-1 text-xs text-muted">Почта — логин. После смены пароль задаётся через «Забыли пароль?».</p>
+                          </div>
+                          {/* Свою роль директор не меняет */}
+                          {u.id === me.id && <input type="hidden" name="role" value={u.role} />}
+                          <select name="role" defaultValue={u.role} disabled={u.id === me.id} className={fieldClass} aria-label="Роль">
                             {ROLES.map((r) => (
                               <option key={r} value={r}>
                                 {ROLE_LABELS[r]}
@@ -48,19 +55,23 @@ export default async function UsersPage() {
                           <input name="position" defaultValue={u.position ?? ""} placeholder="Должность" className={fieldClass} aria-label="Должность" />
                           <SubmitButton size="sm">Сохранить</SubmitButton>
                         </ActionForm>
-                        <ActionForm action={userStatusAction}>
-                          <input type="hidden" name="userId" value={u.id} />
-                          <input type="hidden" name="status" value={u.status === "BLOCKED" ? "ACTIVE" : "BLOCKED"} />
-                          <ConfirmSubmit title={u.status === "BLOCKED" ? "Разблокировать пользователя?" : "Заблокировать пользователя?"} text="Активные сессии будут завершены." variant={u.status === "BLOCKED" ? "primary" : "danger"}>
-                            {u.status === "BLOCKED" ? "Разблокировать" : "Заблокировать"}
-                          </ConfirmSubmit>
-                        </ActionForm>
-                        <ActionForm action={anonymizeUserAction}>
-                          <input type="hidden" name="userId" value={u.id} />
-                          <ConfirmSubmit title="Обезличить персональные данные?" text="Имя, почта и телефон будут удалены без возможности восстановления. Договоры и платежи сохранятся.">
-                            Обезличить ПДн
-                          </ConfirmSubmit>
-                        </ActionForm>
+                        {u.id !== me.id && (
+                          <>
+                            <ActionForm action={userStatusAction}>
+                              <input type="hidden" name="userId" value={u.id} />
+                              <input type="hidden" name="status" value={u.status === "BLOCKED" ? "ACTIVE" : "BLOCKED"} />
+                              <ConfirmSubmit title={u.status === "BLOCKED" ? "Разблокировать пользователя?" : "Заблокировать пользователя?"} text="Активные сессии будут завершены." variant={u.status === "BLOCKED" ? "primary" : "danger"}>
+                                {u.status === "BLOCKED" ? "Разблокировать" : "Заблокировать"}
+                              </ConfirmSubmit>
+                            </ActionForm>
+                            <ActionForm action={anonymizeUserAction}>
+                              <input type="hidden" name="userId" value={u.id} />
+                              <ConfirmSubmit title="Обезличить персональные данные?" text="Имя, почта и телефон будут удалены без возможности восстановления. Договоры и платежи сохранятся.">
+                                Обезличить ПДн
+                              </ConfirmSubmit>
+                            </ActionForm>
+                          </>
+                        )}
                       </div>
                     </details>
                   )}

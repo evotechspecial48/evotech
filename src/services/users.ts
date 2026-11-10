@@ -186,13 +186,33 @@ export async function setUserStatus(actor: SessionUser, userId: string, status: 
   await audit({ actorId: actor.id, action: status === "BLOCKED" ? "user.block" : "user.unblock", entityType: "User", entityId: userId });
 }
 
-export async function updateUser(actor: SessionUser, userId: string, data: { name: string; role: Role; phone: string; position: string }) {
+/**
+ * Изменение пользователя директором. Смена почты (логина) снимает отметку о подтверждении:
+ * пользователь подтверждает новый адрес ссылкой из письма или сбросом пароля через «Забыли пароль?».
+ */
+export async function updateUser(actor: SessionUser, userId: string, data: { name: string; role: Role; phone: string; position: string; email?: string }) {
   if (actor.role !== "DIRECTOR") throw new ForbiddenError();
   if (actor.id === userId && data.role !== "DIRECTOR") throw new UserError("Нельзя снять с себя роль директора");
   const before = await db.user.findUnique({ where: { id: userId } });
   if (!before) throw new NotFoundError("Пользователь");
-  await db.user.update({ where: { id: userId }, data: { name: data.name, role: data.role, phone: data.phone || null, position: data.position || null } });
-  await audit({ actorId: actor.id, action: "user.update", entityType: "User", entityId: userId, meta: { from: { role: before.role }, to: { role: data.role } } });
+  if (before.anonymizedAt) throw new UserError("Данные пользователя обезличены");
+  const email = data.email ? normalizeEmail(data.email) : before.email;
+  const emailChanged = email !== before.email;
+  if (emailChanged) {
+    if (!isEmail(email)) throw new UserError("Некорректный адрес электронной почты", { email: "Некорректный адрес" });
+    if (await db.user.findUnique({ where: { email } })) throw new UserError("Эта почта уже используется другим пользователем", { email: "Почта занята" });
+  }
+  await db.user.update({
+    where: { id: userId },
+    data: { name: data.name, role: data.role, phone: data.phone || null, position: data.position || null, ...(emailChanged ? { email, emailVerifiedAt: null } : {}) },
+  });
+  await audit({
+    actorId: actor.id,
+    action: "user.update",
+    entityType: "User",
+    entityId: userId,
+    meta: { from: { role: before.role, ...(emailChanged ? { email: before.email } : {}) }, to: { role: data.role, ...(emailChanged ? { email } : {}) } },
+  });
 }
 
 /** Экспорт персональных данных пользователя (по запросу субъекта ПДн). */

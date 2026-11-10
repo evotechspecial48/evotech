@@ -495,7 +495,7 @@ export async function inviteUserAction(_: ActionState, fd: FormData): Promise<Ac
 export async function updateUserAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const user = await actor("users.manage");
-    await users.updateUser(user, str(fd, "userId"), { name: str(fd, "name", 120), role: str(fd, "role") as Role, phone: str(fd, "phone"), position: str(fd, "position") });
+    await users.updateUser(user, str(fd, "userId"), { name: str(fd, "name", 120), role: str(fd, "role") as Role, phone: str(fd, "phone"), position: str(fd, "position"), email: str(fd, "email", 200) });
     return { ok: true, message: "Сохранено" };
   });
 }

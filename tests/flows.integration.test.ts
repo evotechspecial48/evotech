@@ -8,6 +8,7 @@ import { createLead, changeLeadStatus } from "@/services/leads";
 import { acceptContract, createLeadContract, requestContractOtp } from "@/services/contracts";
 import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject } from "@/services/projects";
 import { createManualProject } from "@/services/customers";
+import { requestPasswordReset, resetPassword, updateUser } from "@/services/users";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
 import { saveGenerated } from "@/services/files";
@@ -257,6 +258,23 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     expect(done.timer?.pauses.every((p) => p.endedAt)).toBe(true);
     expect(done.requests.every((r) => r.status !== "OPEN")).toBe(true);
     await expect(completeProject(pm, project.id, "Повторно")).rejects.toBeInstanceOf(UserError);
+  });
+
+  it("директор меняет почту (логин) сотрудника: проверка формата и занятости, сброс подтверждения", async () => {
+    const staff = await user("old-login@evotech.local", "SALES_MANAGER", "Менеджер Старый");
+    const base = { name: staff.name, role: staff.role, phone: "", position: "" };
+    await expect(updateUser(pm, staff.id, { ...base, email: "new@t.ru" })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(updateUser(director, staff.id, { ...base, email: "не почта" })).rejects.toBeInstanceOf(UserError);
+    await expect(updateUser(director, staff.id, { ...base, email: "PM@t.ru" })).rejects.toBeInstanceOf(UserError);
+    await updateUser(director, staff.id, { ...base, email: " New.Manager@T.ru " });
+    const after = await db.user.findUniqueOrThrow({ where: { id: staff.id } });
+    expect(after.email).toBe("new.manager@t.ru");
+    expect(after.emailVerifiedAt).toBeNull();
+    // Сброс пароля по новой почте подтверждает адрес
+    await requestPasswordReset("new.manager@t.ru", "10.0.0.9");
+    const mail = await db.outboundEmail.findFirstOrThrow({ where: { to: "new.manager@t.ru", subject: "Восстановление пароля" } });
+    await resetPassword(mail.text.match(/token=([\w-]+)/)![1], "NewPass2026");
+    expect((await db.user.findUniqueOrThrow({ where: { id: staff.id } })).emailVerifiedAt).not.toBeNull();
   });
 
   it("журнал фиксирует критичные действия", async () => {
