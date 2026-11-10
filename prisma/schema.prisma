@@ -668,6 +668,15 @@ model Payment {
   paymentUrl        String?
   errorMessage      String?
   testMode          Boolean       @default(true)
+  // Номер счёта для банка (только цифры) — для счетов и QR через Т-Бизнес
+  number            Int           @unique @default(autoincrement())
+  // prepay | final | custom | quick_order
+  kind              String?
+  // QR СБП: картинка (PNG, base64) и срок действия ссылки
+  qrImage           String?
+  expiresAt         DateTime?
+  // PDF счёта, сохранённый в хранилище (ссылка банка живёт 10 дней)
+  fileId            String?
   contractId        String?
   contract          Contract?     @relation(fields: [contractId], references: [id])
   projectId         String?

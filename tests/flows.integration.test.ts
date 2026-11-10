@@ -9,6 +9,7 @@ import { acceptContract, createLeadContract, requestContractOtp } from "@/servic
 import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject } from "@/services/projects";
 import { createManualProject } from "@/services/customers";
 import { requestPasswordReset, resetPassword, updateUser } from "@/services/users";
+import { cancelInvoice, issueContractPayment, markPaidManually } from "@/services/invoices";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
 import { saveGenerated } from "@/services/files";
@@ -275,6 +276,32 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     const mail = await db.outboundEmail.findFirstOrThrow({ where: { to: "new.manager@t.ru", subject: "Восстановление пароля" } });
     await resetPassword(mail.text.match(/token=([\w-]+)/)![1], "NewPass2026");
     expect((await db.user.findUniqueOrThrow({ where: { id: staff.id } })).emailVerifiedAt).not.toBeNull();
+  });
+
+  it("счёт по договору: предоплата 50% с PDF, ручная отметка оплаты, окончательный расчёт — остаток; СБП без Т-Бизнеса недоступна", async () => {
+    const contract = await db.contract.findFirstOrThrow({ where: { status: "SIGNED", quickOrderId: null, projectId: { not: null } } });
+    await expect(issueContractPayment(customer, { contractId: contract.id, kind: "prepay", method: "invoice" })).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(issueContractPayment(sales, { contractId: contract.id, kind: "prepay", method: "sbp" })).rejects.toBeInstanceOf(UserError);
+
+    const prepay = await issueContractPayment(sales, { contractId: contract.id, kind: "prepay", method: "invoice" });
+    const issued = await db.payment.findUniqueOrThrow({ where: { id: prepay.id } });
+    expect(issued.amount).toBe(Math.round(contract.amount / 2) * 100);
+    expect(issued.status).toBe("pending");
+    const pdf = await db.fileAsset.findUniqueOrThrow({ where: { id: issued.fileId! } });
+    expect(pdf.mimeType).toBe("application/pdf");
+
+    await expect(markPaidManually(sales, issued.id, "")).rejects.toBeInstanceOf(UserError);
+    await markPaidManually(sales, issued.id, "п/п № 15 от 10.11.2026");
+    const paid = await db.payment.findUniqueOrThrow({ where: { id: issued.id } });
+    expect(paid.status).toBe("paid");
+    expect(paid.paidAt).not.toBeNull();
+    // Повторная отметка не меняет платёж
+    await expect(markPaidManually(sales, issued.id, "повтор")).rejects.toBeInstanceOf(UserError);
+
+    const final = await issueContractPayment(pm, { contractId: contract.id, kind: "final", method: "invoice" });
+    expect((await db.payment.findUniqueOrThrow({ where: { id: final.id } })).amount).toBe((contract.amount - Math.round(contract.amount / 2)) * 100);
+    await cancelInvoice(pm, final.id);
+    expect((await db.payment.findUniqueOrThrow({ where: { id: final.id } })).status).toBe("cancelled");
   });
 
   it("журнал фиксирует критичные действия", async () => {

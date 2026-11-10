@@ -13,7 +13,7 @@ export default function PrivacyPage() {
         <p className="text-sm text-warning-700">Черновик документа. Перед публикацией требуется проверка юристом и указание полных реквизитов оператора.</p>
         <h2>1. Оператор</h2>
         <p>
-          {COMPANY.legalName} (ИНН {COMPANY.inn}), {COMPANY.address}, e-mail: {COMPANY.email}.
+          {COMPANY.legalName} (ИНН {COMPANY.inn}, ОГРНИП {COMPANY.ogrnip}), {COMPANY.address}, e-mail: {COMPANY.email}.
         </p>
         <h2>2. Какие данные обрабатываются</h2>
         <ul>

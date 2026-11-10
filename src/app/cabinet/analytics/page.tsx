@@ -3,8 +3,9 @@ import { requireUser } from "@/lib/auth";
 import { one } from "@/lib/page";
 import { LEAD_SOURCE, LEAD_STATUS, PAYMENT_STATUS, PROJECT_STATUS, QUICK_ORDER_STATUS } from "@/domain/labels";
 import { STAGES } from "@/domain/stage";
-import { getAnalytics } from "@/services/analytics";
-import { Card, PageHeader, Stat, Table } from "@/components/ui";
+import { getAnalytics, getMonthlyStats, type MonthRow } from "@/services/analytics";
+import { monthLabel } from "@/domain/months";
+import { Card, PageHeader, rub, Stat, Table } from "@/components/ui";
 
 function Bars({ rows, labels, unit = "" }: { rows: { key: string; value: number }[]; labels: Record<string, string | { label: string }>; unit?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -33,7 +34,9 @@ function Bars({ rows, labels, unit = "" }: { rows: { key: string; value: number 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   await requireUser("analytics.view");
   const period = [7, 30, 90, 365].includes(Number(one((await searchParams).period))) ? Number(one((await searchParams).period)) : 30;
-  const a = await getAnalytics(period);
+  const [a, months] = await Promise.all([getAnalytics(period), getMonthlyStats(12)]);
+  const maxAmount = Math.max(1, ...months.map((m) => m.contractsAmount));
+  const sum = (k: keyof Omit<MonthRow, "month">) => months.reduce((s, m) => s + m[k], 0);
   const stageTitle = Object.fromEntries(STAGES.map((s) => [s.code, s.title]));
   return (
     <>
@@ -56,6 +59,40 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         <Stat label="Возвраты на доработку" value={a.returnsCount} hint={`за ${period} дн.`} />
         <Stat label="Оплачено" value={`${a.paidTotal.toLocaleString("ru-RU")} ₽`} />
       </div>
+      <Card title="Итоги по месяцам" className="mt-6">
+        <Table head={["Месяц", "Заявки", "Отказы", "Договоры", "Сумма договоров", "Начато проектов", "Завершено", "Оплачено"]}>
+          {months.map((m) => (
+            <tr key={m.month}>
+              <td className="whitespace-nowrap font-medium">{monthLabel(m.month)}</td>
+              <td className="font-mono">{m.leads}</td>
+              <td className="font-mono">{m.lost}</td>
+              <td className="font-mono">{m.contracts}</td>
+              <td className="min-w-48">
+                <span className="flex items-center gap-2">
+                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-steel-100" aria-hidden="true">
+                    <span className="block h-full rounded-full bg-accent-600" style={{ width: `${(m.contractsAmount / maxAmount) * 100}%` }} />
+                  </span>
+                  <span className="whitespace-nowrap font-mono text-xs">{rub(m.contractsAmount)}</span>
+                </span>
+              </td>
+              <td className="font-mono">{m.projectsStarted}</td>
+              <td className="font-mono">{m.projectsCompleted}</td>
+              <td className="whitespace-nowrap font-mono">{rub(m.paid)}</td>
+            </tr>
+          ))}
+          <tr className="border-t-2 border-line-strong font-semibold">
+            <td>Итого за {months.length} мес.</td>
+            <td className="font-mono">{sum("leads")}</td>
+            <td className="font-mono">{sum("lost")}</td>
+            <td className="font-mono">{sum("contracts")}</td>
+            <td className="whitespace-nowrap font-mono">{rub(sum("contractsAmount"))}</td>
+            <td className="font-mono">{sum("projectsStarted")}</td>
+            <td className="font-mono">{sum("projectsCompleted")}</td>
+            <td className="whitespace-nowrap font-mono">{rub(sum("paid"))}</td>
+          </tr>
+        </Table>
+        <p className="mt-3 text-xs text-muted">Договоры — по дате подписания (без быстрых заказов), проекты — по месяцу договора, оплаты — по дате зачисления.</p>
+      </Card>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card title="Источники заявок">
           <Bars rows={a.leadsBySource.map((s) => ({ key: s.source, value: s.count }))} labels={LEAD_SOURCE} />

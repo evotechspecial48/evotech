@@ -9,6 +9,7 @@ import { NotFoundError, UserError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth";
 import { can, ForbiddenError } from "@/domain/rbac";
 import { checksum, renderTemplate } from "@/domain/spec";
+import { rublesInWords } from "@/domain/money-words";
 import { loadLeadAccess } from "./scope";
 import { inviteUser } from "./users";
 
@@ -28,6 +29,18 @@ export async function companyRequisites(): Promise<Record<string, string>> {
 
 const fmtDate = (d: Date) => d.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
 const money = (n: number) => n.toLocaleString("ru-RU");
+/** «10» ноября 2026 г. — как в бланке договора. */
+export const longDate = (d: Date) => {
+  const [day, month, year] = d.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "2-digit", month: "long", year: "numeric" }).replace(" г.", "").split(" ");
+  return `«${day}» ${month} ${year} г.`;
+};
+
+/** Вступление договора за Заказчика: организация «в лице …», ИП или физическое лицо. */
+function customerIntro(companyName: string | null | undefined, contact: string): string {
+  if (!companyName) return `${contact}, именуемый(-ая) в дальнейшем «Заказчик»`;
+  if (/^(ИП|индивидуальный предприниматель)\b/i.test(companyName)) return `${companyName}, именуемый в дальнейшем «Заказчик»`;
+  return `${companyName} в лице ${contact}, действующего на основании Устава, именуемое в дальнейшем «Заказчик»`;
+}
 
 export async function contractVars(input: {
   number: string;
@@ -35,26 +48,45 @@ export async function contractVars(input: {
   customerEmail: string;
   customerPhone?: string | null;
   companyName?: string | null;
+  /** Строки реквизитов Заказчика (ИНН, адрес, банк…) — для блока «Реквизиты сторон». */
+  customerRequisites?: string[];
   subject: string;
   amount: number;
   termDays: number;
   extra?: Record<string, string>;
 }) {
   const req = await companyRequisites();
+  const customerBlock = [input.companyName || input.customerName, ...(input.customerRequisites ?? []), `Эл. почта: ${input.customerEmail}`, input.customerPhone ? `Тел.: ${input.customerPhone}` : ""].filter(Boolean);
   return {
     number: input.number,
     date: fmtDate(new Date()),
+    dateLong: longDate(new Date()),
     city: req.city ?? "Липецк",
-    executorName: req.name ?? "ООО «ЭвоТехнолоджи»",
+    executorName: req.name,
+    executorShortName: req.shortName ?? req.name,
+    executorSigner: req.signer,
     executorInn: req.inn,
+    executorOgrnip: req.ogrnip,
+    executorSro: req.sro,
     executorAddress: req.address,
     executorBank: req.bank,
+    executorAccount: req.account,
+    executorBankName: req.bankName,
+    executorCorrAccount: req.corrAccount,
+    executorBik: req.bik,
+    executorEmail: req.email,
+    executorPhone: req.phone,
     customerName: input.companyName || input.customerName,
     customerContact: input.customerName,
+    customerIntro: customerIntro(input.companyName, input.customerName),
     customerEmail: input.customerEmail,
     customerPhone: input.customerPhone ?? "",
+    // Многострочная ячейка таблицы реквизитов (перенос строки — <br>)
+    customerRequisites: customerBlock.join("<br>"),
     subject: input.subject,
     amount: money(input.amount),
+    amountWords: rublesInWords(input.amount),
+    prepayAmount: money(Math.round(input.amount / 2)),
     termDays: String(input.termDays),
     ...input.extra,
   };

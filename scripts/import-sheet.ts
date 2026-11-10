@@ -13,6 +13,7 @@ import { hashPassword } from "../src/lib/auth";
 import { checksum, renderTemplate } from "../src/domain/spec";
 import { createProjectTx } from "../src/services/projects";
 import { CONTRACT_TEMPLATE } from "../prisma/templates";
+import { COMPANY_REQUISITES } from "../prisma/company";
 
 const IMPORT_TAG = "sheet-2026-10";
 // Пароль новым сотрудникам: IMPORT_STAFF_PASSWORD (локальная проверка) или случайный, выводится один раз
@@ -222,7 +223,7 @@ async function importProjects(staff: Awaited<ReturnType<typeof upsertStaff>>) {
       number,
       date: "01.10.2026",
       city: "Липецк",
-      executorName: "ООО «ЭвоТехнолоджи»",
+      executorName: COMPANY_REQUISITES.name,
       customerName: r.client,
       customerContact: r.client,
       customerEmail: cust.email,

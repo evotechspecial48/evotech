@@ -6,6 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "../src/lib/db";
 import { hashPassword } from "../src/lib/auth";
 import { textToPdf } from "../src/lib/pdf";
+import { COMPANY_REQUISITES } from "./company";
 import { MockAIProvider } from "../src/lib/ai/mock-provider";
 import { saveGenerated } from "../src/services/files";
 import { createProjectTx } from "../src/services/projects";
@@ -41,7 +42,7 @@ async function main() {
       { key: "calendar.holidays", value: ["2026-01-01", "2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-02-23", "2026-03-09", "2026-05-01", "2026-05-11", "2026-06-12", "2026-11-04", "2026-12-31"] },
       {
         key: "company.requisites",
-        value: { name: "ООО «ЭвоТехнолоджи»", inn: "4800000000", city: "Липецк", address: "398000, г. Липецк (адрес уточняется)", bank: "АО «ТБанк», БИК 044525974", phone: "+7 920 240-19-45", email: "info@evotechnology.su" },
+        value: COMPANY_REQUISITES,
       },
     ],
   });
@@ -149,7 +150,7 @@ async function main() {
   await db.commercialOffer.create({
     data: { leadId: lead3.id, items: [{ title: "Разработка КМ", qty: 1, unit: "компл.", price: 45000 }, { title: "Разработка КМД", qty: 1, unit: "компл.", price: 35000 }], total: 80000, termDays: 15, validUntil: new Date(Date.now() + 20 * DAY), status: "ACCEPTED", createdById: sales.id },
   });
-  const c3body = renderTemplate(CONTRACT_TEMPLATE, { number: "Д-2026-0003", date: new Date().toLocaleDateString("ru-RU"), city: "Липецк", executorName: "ООО «ЭвоТехнолоджи»", executorInn: "4800000000", customerName: "ООО «СтройМеталл»", customerContact: customer.name, customerEmail: customer.email, subject: lead3.title, amount: "80 000", termDays: "15" });
+  const c3body = renderTemplate(CONTRACT_TEMPLATE, { number: "Д-2026-0003", date: new Date().toLocaleDateString("ru-RU"), city: "Липецк", executorName: COMPANY_REQUISITES.name, executorInn: COMPANY_REQUISITES.inn, customerName: "ООО «СтройМеталл»", customerContact: customer.name, customerEmail: customer.email, subject: lead3.title, amount: "80 000", termDays: "15" });
   await db.contract.create({
     data: { number: "Д-2026-0003", status: "AWAITING_SIGNATURE", customerId: customer.id, amount: 80000, termDays: 15, leadId: lead3.id, versions: { create: { version: 1, body: c3body, checksum: checksum(c3body), templateId: contractTpl.id, createdById: sales.id } } },
   });

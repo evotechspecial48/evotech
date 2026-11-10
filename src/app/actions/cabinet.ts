@@ -21,6 +21,7 @@ import * as stages from "@/services/stages";
 import * as timer from "@/services/timer";
 import * as contracts from "@/services/contracts";
 import * as customers from "@/services/customers";
+import * as invoices from "@/services/invoices";
 import * as payments from "@/services/payments";
 import * as quick from "@/services/quick-orders";
 import * as aiJobs from "@/services/ai-jobs";
@@ -380,6 +381,34 @@ export async function contractReviseAction(_: ActionState, fd: FormData): Promis
     const user = await actor("contracts.manage");
     await contracts.reviseContract(user, str(fd, "contractId"), str(fd, "body", 100000), num(fd, "amount") ?? 0, num(fd, "termDays") ?? 0);
     return { ok: true, message: "Создана новая версия договора" };
+  });
+}
+
+// ---------- Счета и оплата по договору ----------
+
+export async function issueInvoiceAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor();
+    const kind = (["prepay", "final", "custom"] as const).find((k) => k === str(fd, "kind")) ?? "prepay";
+    const method = str(fd, "method") === "sbp" ? "sbp" : "invoice";
+    const p = await invoices.issueContractPayment(user, { contractId: str(fd, "contractId"), kind, method, amount: num(fd, "amount") });
+    return { ok: true, message: method === "sbp" ? "QR-ссылка СБП выставлена, заказчик получил уведомление" : `Счёт № ${p.number} выставлен, заказчик получил уведомление` };
+  });
+}
+
+export async function markPaidAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor();
+    await invoices.markPaidManually(user, str(fd, "paymentId"), str(fd, "comment", 300));
+    return { ok: true, message: "Оплата отмечена" };
+  });
+}
+
+export async function cancelInvoiceAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor();
+    await invoices.cancelInvoice(user, str(fd, "paymentId"));
+    return { ok: true, message: "Счёт отменён" };
   });
 }
 

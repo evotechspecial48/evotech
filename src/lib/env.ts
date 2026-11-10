@@ -24,10 +24,14 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   CLAUDE_MODEL: z.string().default("claude-opus-5-5"),
   MOCK_AI_DELAY_MS: z.coerce.number().default(2500),
-  PAYMENT_PROVIDER: z.enum(["mock", "tbank"]).default("mock"),
+  // mock — демо-оплата; tbank — интернет-эквайринг; tbank-business — счёт и QR СБП через API Т-Бизнеса
+  PAYMENT_PROVIDER: z.enum(["mock", "tbank", "tbank-business"]).default("mock"),
   TBANK_TERMINAL_KEY: z.string().optional(),
   TBANK_PASSWORD: z.string().optional(),
   TBANK_API_URL: z.string().default("https://securepay.tinkoff.ru/v2"),
+  // Т-Бизнес: токен T-API (Интеграции → T-API) с доступами «Выставление счетов» и «Выставление ссылок через СБП»
+  TBANK_BUSINESS_TOKEN: z.string().optional(),
+  TBANK_BUSINESS_API_URL: z.string().default("https://business.tbank.ru/openapi"),
 });
 
 export const env = schema.parse(process.env);

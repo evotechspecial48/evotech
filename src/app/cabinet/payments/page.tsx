@@ -30,6 +30,11 @@ export default async function PaymentsPage() {
                     <Link href={`/cabinet/quick-orders/${p.quickOrder.id}`} className="hover:text-accent-700">
                       {p.description}
                     </Link>
+                  ) : p.contractId ? (
+                    <Link href={`/cabinet/contracts/${p.contractId}`} className="hover:text-accent-700">
+                      {p.provider === "tbank-invoice" ? `Счёт № ${p.number}. ` : p.provider === "tbank-sbp" ? "QR СБП. " : ""}
+                      {p.description}
+                    </Link>
                   ) : (
                     p.description
                   )}
@@ -42,7 +47,8 @@ export default async function PaymentsPage() {
                 <td className="font-mono text-xs">{p.providerPaymentId ?? "—"}</td>
                 <td className="text-xs text-muted">{p.testMode ? "тестовый" : "боевой"}</td>
                 <td>
-                  {user.role === "DIRECTOR" && p.status === "paid" && (
+                  {/* Возврат через API — только для эквайринга; счёт и СБП возвращаются платёжным поручением */}
+                  {user.role === "DIRECTOR" && p.status === "paid" && (p.provider === "tbank" || p.provider === "mock") && (
                     <ActionForm action={refundAction}>
                       <input type="hidden" name="paymentId" value={p.id} />
                       <ConfirmSubmit title="Оформить возврат?" text="Запрос на возврат будет отправлен в банк.">

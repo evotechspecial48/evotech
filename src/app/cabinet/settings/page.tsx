@@ -62,6 +62,12 @@ export default async function SettingsPage() {
               items={[
                 ["AI-провайдер", <Badge key="ai" tone={env.AI_PROVIDER === "mock" ? "warning" : "success"}>{env.AI_PROVIDER === "mock" ? "Демонстрационный (MockAIProvider)" : `Claude (${env.CLAUDE_MODEL})`}</Badge>],
                 ["Эквайринг", <Badge key="pay" tone={env.PAYMENT_PROVIDER === "mock" ? "warning" : "success"}>{env.PAYMENT_PROVIDER === "mock" ? "Демо-банк" : "Т-Банк"}</Badge>],
+                [
+                  "Т-Бизнес (счета и СБП)",
+                  <Badge key="tb" tone={env.TBANK_BUSINESS_TOKEN ? "success" : "warning"}>
+                    {env.TBANK_BUSINESS_TOKEN ? (/sandbox/.test(env.TBANK_BUSINESS_API_URL) ? "Песочница T-API" : "Подключён (T-API)") : "Не подключён — счета по реквизитам, оплата отмечается вручную"}
+                  </Badge>,
+                ],
                 ["Почта", env.MAIL_TRANSPORT === "smtp" ? `SMTP ${env.SMTP_HOST}:${env.SMTP_PORT}` : "Вывод в лог"],
                 [
                   "Хранилище файлов",

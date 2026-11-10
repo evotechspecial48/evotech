@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { computeTimer } from "@/domain/timer";
 import { holidays } from "./timer";
+import { lastMonths, monthKey, monthRange, projectMonthDate } from "@/domain/months";
 
 export interface Analytics {
   periodDays: number;
@@ -16,6 +17,68 @@ export interface Analytics {
   payments: { status: string; count: number; amount: number }[];
   paidTotal: number;
   quickOrders: { status: string; count: number }[];
+}
+
+export interface MonthRow {
+  month: string;
+  leads: number;
+  lost: number;
+  contracts: number;
+  contractsAmount: number;
+  projectsStarted: number;
+  projectsCompleted: number;
+  paid: number;
+}
+
+/**
+ * Итоги по месяцам (московское время), от текущего месяца назад.
+ * Договоры — по дате подписания; начатые проекты — по месяцу проекта (договор, иначе создание);
+ * завершённые — по дате перехода в «Завершён»; оплаты — по дате зачисления (₽).
+ */
+export async function getMonthlyStats(count = 12, now = new Date()): Promise<MonthRow[]> {
+  const keys = lastMonths(count, now);
+  const since = monthRange(keys[keys.length - 1]).from;
+  const [leads, lost, contracts, projects, completed, paid] = await Promise.all([
+    db.lead.findMany({ where: { createdAt: { gte: since } }, select: { createdAt: true } }),
+    db.statusChange.findMany({ where: { entityType: "Lead", toStatus: "lost", createdAt: { gte: since } }, select: { createdAt: true } }),
+    db.contract.findMany({ where: { status: "SIGNED", signedAt: { gte: since }, quickOrderId: null }, select: { signedAt: true, amount: true } }),
+    db.project.findMany({ select: { createdAt: true, contracts: { where: { status: { not: "CANCELLED" } }, select: { signedAt: true } } } }),
+    db.statusChange.findMany({ where: { entityType: "Project", toStatus: "COMPLETED", createdAt: { gte: since } }, select: { entityId: true, createdAt: true } }),
+    db.payment.findMany({ where: { status: "paid", paidAt: { gte: since } }, select: { paidAt: true, amount: true } }),
+  ]);
+  const rows = new Map<string, MonthRow>(keys.map((month) => [month, { month, leads: 0, lost: 0, contracts: 0, contractsAmount: 0, projectsStarted: 0, projectsCompleted: 0, paid: 0 }]));
+  const at = (d: Date) => rows.get(monthKey(d));
+  for (const l of leads) {
+    const r = at(l.createdAt);
+    if (r) r.leads++;
+  }
+  for (const l of lost) {
+    const r = at(l.createdAt);
+    if (r) r.lost++;
+  }
+  for (const c of contracts) {
+    const r = at(c.signedAt!);
+    if (r) {
+      r.contracts++;
+      r.contractsAmount += c.amount;
+    }
+  }
+  for (const p of projects) {
+    const r = at(projectMonthDate(p));
+    if (r) r.projectsStarted++;
+  }
+  // Проект, завершённый, возвращённый в работу и завершённый снова, учитывается по последнему завершению
+  const lastCompletion = new Map<string, Date>();
+  for (const c of completed) if (!lastCompletion.has(c.entityId) || lastCompletion.get(c.entityId)! < c.createdAt) lastCompletion.set(c.entityId, c.createdAt);
+  for (const d of lastCompletion.values()) {
+    const r = at(d);
+    if (r) r.projectsCompleted++;
+  }
+  for (const p of paid) {
+    const r = at(p.paidAt!);
+    if (r) r.paid += p.amount / 100;
+  }
+  return keys.map((k) => rows.get(k)!);
 }
 
 export async function getAnalytics(periodDays = 30): Promise<Analytics> {

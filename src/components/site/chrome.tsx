@@ -21,7 +21,6 @@ export function Logo({ light = false, height = 40 }: { light?: boolean; height?:
 // Все разделы собраны на главной посадочной странице — пункты меню ведут на её якоря
 const NAV = [
   { href: "/#o-nas", label: "О компании" },
-  { href: "/raboty", label: "Примеры работ" },
   { href: "/bystryj-zakaz", label: "Быстрый заказ" },
   { href: "/#kontakty", label: "Контакты" },
 ];
@@ -101,6 +100,9 @@ export function SiteFooter() {
             <a href={COMPANY.whatsapp} className="underline-offset-2 hover:text-white hover:underline" rel="noopener" target="_blank">
               WhatsApp
             </a>
+            <a href={COMPANY.max} className="underline-offset-2 hover:text-white hover:underline" rel="noopener" target="_blank" title={`MAX: ${COMPANY.phone}`}>
+              MAX
+            </a>
           </div>
         </div>
         <div>
@@ -135,7 +137,7 @@ export function SiteFooter() {
             </li>
           </ul>
           <p className="mt-4 text-xs text-steel-400">
-            {COMPANY.legalName}, ИНН {COMPANY.inn}
+            {COMPANY.legalName}, ИНН {COMPANY.inn}, ОГРНИП {COMPANY.ogrnip}
             <br />
             {COMPANY.address}
           </p>

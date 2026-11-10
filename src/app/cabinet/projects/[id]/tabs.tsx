@@ -46,7 +46,7 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
       manager: true,
       salesManager: true,
       members: { include: { user: true } },
-      contracts: { orderBy: { createdAt: "desc" } },
+      contracts: { orderBy: { createdAt: "desc" }, include: { payments: { where: { status: "paid" }, select: { amount: true } } } },
       timer: { include: { pauses: { orderBy: { startedAt: "desc" } } } },
     },
   });
@@ -211,7 +211,7 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
               {project.contracts.map((c) => (
                 <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
                   <Link href={`/cabinet/contracts/${c.id}`} className="text-accent-700 hover:underline">
-                    {c.number} · {rub(c.amount)} · {c.termDays} дн.
+                    {c.number} · {rub(c.amount)} · {c.termDays} дн. · оплачено {rub(c.payments.reduce((s, p) => s + p.amount, 0) / 100)}
                   </Link>
                   <span className="flex items-center gap-2">
                     <StatusBadge map={CONTRACT_STATUS} value={c.status} />

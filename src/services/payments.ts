@@ -6,11 +6,13 @@ import { notify } from "@/lib/notify";
 import { logger } from "@/lib/logger";
 import { randomToken } from "@/lib/crypto";
 import { paymentProvider } from "@/lib/payments";
+import { tbankBusiness } from "@/lib/payments/tbank-business";
 import { NotFoundError, UserError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth";
 import { canPay } from "@/domain/access";
 import { canApplyPaymentStatus, mapTbankStatus } from "@/domain/tbank";
 import { ForbiddenError } from "@/domain/rbac";
+import { companyRequisites } from "./contracts";
 
 /**
  * Создание платежа за быстрый заказ. Оплата недоступна до подтверждения актуальной версии договора.
@@ -35,6 +37,9 @@ export async function createQuickOrderPayment(user: SessionUser, quickOrderId: s
   if (!qo.price) throw new UserError("Стоимость заказа не определена");
 
   const amountKop = qo.price * 100;
+  if (env.PAYMENT_PROVIDER === "tbank-business" && tbankBusiness().name === "tbank-business") {
+    return createQuickOrderSbp(user, { id: qo.id, number: qo.number, contractId: contract!.id, amountKop, payments: qo.payments });
+  }
   const reusable = qo.payments.find((p) => p.status === "pending" && p.amount === amountKop && p.paymentUrl && Date.now() - p.createdAt.getTime() < 20 * 60_000);
   if (reusable) return { paymentUrl: reusable.paymentUrl! };
 
@@ -70,6 +75,31 @@ export async function createQuickOrderPayment(user: SessionUser, quickOrderId: s
     // Сбой банка не теряет заказ: платёж помечается ошибкой, заказчик может повторить
     await db.payment.update({ where: { id: payment.id }, data: { status: "failed", errorMessage: err instanceof Error ? err.message.slice(0, 300) : "error" } });
     logger.error("payment.init_failed", { orderId, err });
+    throw new UserError("Платёжный сервис временно недоступен. Попробуйте позже — заказ сохранён.");
+  }
+}
+
+/** Быстрый заказ через Т-Бизнес: одноразовая QR-ссылка СБП на расчётный счёт; статус сверяет воркер. */
+async function createQuickOrderSbp(
+  user: SessionUser,
+  qo: { id: string; number: number; contractId: string; amountKop: number; payments: { status: string; provider: string; amount: number; paymentUrl: string | null; expiresAt: Date | null }[] },
+): Promise<{ paymentUrl: string }> {
+  const reusable = qo.payments.find((p) => p.status === "pending" && p.provider === "tbank-sbp" && p.amount === qo.amountKop && p.paymentUrl && p.expiresAt && p.expiresAt > new Date());
+  if (reusable) return { paymentUrl: reusable.paymentUrl! };
+  const r = await companyRequisites();
+  const orderId = `QO${qo.number}-${randomToken(4)}`;
+  const purpose = `Оплата по договору-оферте, быстрый заказ № ${qo.number}. НДС не облагается`;
+  const payment = await db.payment.create({
+    data: { orderId, idempotencyKey: `${qo.id}:${orderId}`, provider: "tbank-sbp", kind: "quick_order", amount: qo.amountKop, description: purpose, testMode: tbankBusiness().testMode, contractId: qo.contractId, quickOrderId: qo.id, payerId: user.id },
+  });
+  try {
+    const res = await tbankBusiness().createQr({ sum: qo.amountKop / 100, purpose, accountNumber: r.account, ttlDays: 1, redirectUrl: `${env.APP_URL}/cabinet/quick-orders/${qo.id}?payment=success` });
+    await db.payment.update({ where: { id: payment.id }, data: { providerPaymentId: res.qrId, paymentUrl: res.paymentUrl, qrImage: res.image, expiresAt: new Date(Date.now() + 86400_000) } });
+    await audit({ actorId: user.id, action: "payment.create", entityType: "Payment", entityId: payment.id, meta: { orderId, amount: qo.amountKop, provider: "tbank-sbp" } });
+    return { paymentUrl: res.paymentUrl };
+  } catch (err) {
+    await db.payment.update({ where: { id: payment.id }, data: { status: "failed", errorMessage: err instanceof Error ? err.message.slice(0, 300) : "error" } });
+    logger.error("payment.sbp_failed", { orderId, err });
     throw new UserError("Платёжный сервис временно недоступен. Попробуйте позже — заказ сохранён.");
   }
 }

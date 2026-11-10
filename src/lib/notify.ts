@@ -15,6 +15,7 @@ export type NotificationType =
   | "timer.paused"
   | "timer.resumed"
   | "deadline.warning"
+  | "payment.invoice"
   | "payment.completed"
   | "payment.failed"
   | "archive.ready"

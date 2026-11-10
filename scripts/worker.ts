@@ -1,10 +1,11 @@
 // Фоновый воркер: AI-задачи (в т.ч. зависшие после перезапуска), повторная отправка писем,
-// обновление состояния таймеров и предупреждения о сроках.
+// обновление состояния таймеров и предупреждения о сроках, сверка счетов и QR СБП с Т-Бизнесом.
 // Запуск: npm run worker (переменные окружения — из .env).
 
 import { runPendingJobs } from "../src/services/ai-jobs";
 import { retryFailedEmails } from "../src/lib/mailer";
 import { refreshTimers } from "../src/services/timer";
+import { syncBankPayments } from "../src/services/invoices";
 import { logger } from "../src/lib/logger";
 
 const TICK_MS = 5_000;
@@ -20,6 +21,8 @@ async function tick() {
       const warned = await refreshTimers();
       lastTimers = Date.now();
       if (warned) logger.info("worker.deadline_warnings", { warned });
+      const paid = await syncBankPayments();
+      if (paid) logger.info("worker.bank_payments", { changed: paid });
     }
     if (jobs || mails) logger.info("worker.tick", { jobs, mails });
   } catch (err) {

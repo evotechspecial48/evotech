@@ -5,12 +5,13 @@
 import type { Prisma, TemplateKind } from "@prisma/client";
 import { db } from "../src/lib/db";
 import { CONTRACT_TEMPLATE, OFFER_TEMPLATE, QUICK_CONTRACT_TEMPLATE } from "../prisma/templates";
+import { COMPANY_REQUISITES } from "../prisma/company";
 
 const SETTINGS: Record<string, Prisma.InputJsonValue> = {
   "timer.defaultMode": "WORKING",
   "files.maxSizeMb": 500,
   "calendar.holidays": ["2026-01-01", "2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-02-23", "2026-03-09", "2026-05-01", "2026-05-11", "2026-06-12", "2026-11-04", "2026-12-31"],
-  "company.requisites": { name: "ООО «ЭвоТехнолоджи»", inn: "уточняется", city: "Липецк", address: "г. Липецк", bank: "", phone: "+7 920 240-19-45", email: "info@evotechnology.su" },
+  "company.requisites": COMPANY_REQUISITES,
 };
 
 const TEMPLATES: { kind: TemplateKind; name: string; body: string }[] = [

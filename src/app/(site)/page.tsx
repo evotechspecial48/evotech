@@ -336,6 +336,7 @@ export default function HomePage() {
                 {[
                   ["WhatsApp", COMPANY.whatsapp],
                   ["Telegram", COMPANY.telegram],
+                  ["MAX", COMPANY.max],
                   ["ВКонтакте", COMPANY.vk],
                 ].map(([l, h]) => (
                   <a key={l} href={h} target="_blank" rel="noopener" className={btnClass("secondary", "sm")}>
@@ -351,7 +352,7 @@ export default function HomePage() {
             <div>
               <dt className="text-xs text-muted">Реквизиты</dt>
               <dd className="mt-1">
-                {COMPANY.legalName}, ИНН {COMPANY.inn}
+                {COMPANY.legalName}, ИНН {COMPANY.inn}, ОГРНИП {COMPANY.ogrnip}
               </dd>
             </div>
           </dl>

@@ -6,6 +6,8 @@ import { can } from "@/domain/rbac";
 import { CONTRACT_STATUS } from "@/domain/labels";
 import { contractCancelAction, contractReviseAction } from "@/app/actions/cabinet";
 import { ContractSign } from "@/components/cabinet/contract-sign";
+import { ContractPayments } from "@/components/cabinet/contract-payments";
+import { DocBody } from "@/components/cabinet/doc-body";
 import { ActionForm, ConfirmSubmit, SubmitButton } from "@/components/client";
 import { Alert, Badge, btnClass, Card, DefList, fieldClass, fmtDateTime, PageHeader, rub, StatusBadge } from "@/components/ui";
 
@@ -15,7 +17,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
   const user = await requireUser(["contracts.manage", "contracts.accept", "projects.view_all"]);
   const contract = await db.contract.findUnique({
     where: { id },
-    include: { versions: { orderBy: { version: "desc" } }, acceptances: { include: { version: true } }, lead: { select: { id: true, number: true } }, project: { select: { id: true, number: true } }, quickOrder: { select: { id: true, number: true } } },
+    include: { versions: { orderBy: { version: "desc" } }, acceptances: { include: { version: true } }, payments: true, lead: { select: { id: true, number: true } }, project: { select: { id: true, number: true } }, quickOrder: { select: { id: true, number: true } } },
   });
   if (!contract) notFound();
   const isOwner = contract.customerId === user.id;
@@ -49,7 +51,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
             </div>
           )}
           <div className="prose-doc max-h-[70vh] overflow-y-auto rounded-lg border border-line bg-steel-50 p-5">
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{shown.body}</pre>
+            <DocBody body={shown.body} />
           </div>
           <p className="mt-2 font-mono text-xs text-muted">Контрольная сумма: {shown.checksum.slice(0, 32)}…</p>
         </Card>
@@ -64,6 +66,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
               {signers[accepted.userId]} · {fmtDateTime(accepted.acceptedAt)} · IP {accepted.ip} · редакция {accepted.version.version} · способ: простая ЭП (код из письма)
             </Alert>
           )}
+          {(contract.status === "SIGNED" || contract.payments.length > 0) && <ContractPayments user={user} contract={contract} payments={contract.payments} />}
           <Card title="Основание">
             <DefList
               items={[

@@ -17,8 +17,16 @@ export interface ManualProjectInput {
   invite: boolean;
 }
 
-/** Реквизиты организации заказчика одной строкой — для договора и карточки проекта. */
-export function requisitesLine(c: { name?: string | null; inn?: string | null; kpp?: string | null; ogrn?: string | null; legalAddress?: string | null; bankDetails?: string | null; phone?: string | null } | null | undefined): string {
+type CompanyRequisites = { name?: string | null; inn?: string | null; kpp?: string | null; ogrn?: string | null; legalAddress?: string | null; bankDetails?: string | null; phone?: string | null };
+
+/** Реквизиты организации заказчика построчно (без наименования) — для блока «Реквизиты сторон» договора. */
+export function requisitesLines(c: CompanyRequisites | null | undefined): string[] {
+  if (!c) return [];
+  return [c.inn && `ИНН: ${c.inn}`, c.kpp && `КПП: ${c.kpp}`, c.ogrn && `ОГРН: ${c.ogrn}`, c.legalAddress && `Адрес: ${c.legalAddress}`, c.bankDetails && `Банк: ${c.bankDetails}`, c.phone && `Тел. организации: ${c.phone}`].filter((x): x is string => !!x);
+}
+
+/** Реквизиты организации заказчика одной строкой — для карточки проекта. */
+export function requisitesLine(c: CompanyRequisites | null | undefined): string {
   if (!c) return "";
   return [
     c.name,
@@ -82,7 +90,7 @@ export async function createManualProject(user: SessionUser, input: ManualProjec
       subject: p.title,
       amount: p.amount,
       termDays: p.termDays,
-      extra: { customerRequisites: requisites },
+      customerRequisites: requisitesLines(company),
     }),
   );
   // Шаблоны, созданные до появления переменной {{customerRequisites}}, — реквизиты дописываются в конец
