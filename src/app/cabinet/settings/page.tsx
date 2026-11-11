@@ -68,6 +68,12 @@ export default async function SettingsPage() {
                     {env.TBANK_BUSINESS_TOKEN ? (/sandbox/.test(env.TBANK_BUSINESS_API_URL) ? "Песочница T-API" : "Подключён (T-API)") : "Не подключён — счета по реквизитам, оплата отмечается вручную"}
                   </Badge>,
                 ],
+                [
+                  "ЭДО СБИС (Saby)",
+                  <Badge key="sbis" tone={env.SBIS_LOGIN ? "success" : "warning"}>
+                    {env.SBIS_LOGIN ? `Подключено (${env.SBIS_API_URL.replace(/^https?:\/\//, "")})` : "Не подключено — договоры подписываются кодом из письма"}
+                  </Badge>,
+                ],
                 ["Почта", env.MAIL_TRANSPORT === "smtp" ? `SMTP ${env.SMTP_HOST}:${env.SMTP_PORT}` : "Вывод в лог"],
                 [
                   "Хранилище файлов",

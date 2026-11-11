@@ -602,6 +602,12 @@ model Contract {
   quickOrder     QuickOrder?    @relation(fields: [quickOrderId], references: [id])
   currentVersion Int            @default(1)
   signedAt       DateTime?
+  // ЭДО СБИС (Saby): документ «Договор», его состояние (код и название) и ссылка на карточку в Saby
+  sbisDocumentId String?        @unique
+  sbisStateCode  String?
+  sbisStateName  String?
+  sbisLink       String?
+  sbisSentAt     DateTime?
   createdAt      DateTime       @default(now())
   versions       ContractVersion[]
   acceptances    ContractAcceptance[]

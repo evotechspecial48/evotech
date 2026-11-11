@@ -22,6 +22,7 @@ import * as timer from "@/services/timer";
 import * as contracts from "@/services/contracts";
 import * as customers from "@/services/customers";
 import * as invoices from "@/services/invoices";
+import * as edo from "@/services/edo";
 import * as payments from "@/services/payments";
 import * as quick from "@/services/quick-orders";
 import * as aiJobs from "@/services/ai-jobs";
@@ -430,6 +431,14 @@ export async function cancelInvoiceAction(_: ActionState, fd: FormData): Promise
     const user = await actor();
     await invoices.cancelInvoice(user, str(fd, "paymentId"));
     return { ok: true, message: "Счёт отменён" };
+  });
+}
+
+export async function sendSbisAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("contracts.manage");
+    await edo.sendContractToSbis(user, str(fd, "contractId"), { inn: str(fd, "inn", 20), kpp: str(fd, "kpp", 20) });
+    return { ok: true, message: "Договор загружен в СБИС — подпишите и отправьте его в Saby" };
   });
 }
 

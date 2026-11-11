@@ -4,11 +4,12 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/domain/rbac";
 import { CONTRACT_STATUS } from "@/domain/labels";
-import { contractCancelAction, contractReviseAction } from "@/app/actions/cabinet";
+import { contractCancelAction, contractReviseAction, sendSbisAction } from "@/app/actions/cabinet";
+import { sbis } from "@/lib/edo/sbis";
 import { ContractSign } from "@/components/cabinet/contract-sign";
 import { ContractPayments } from "@/components/cabinet/contract-payments";
 import { DocBody } from "@/components/cabinet/doc-body";
-import { ActionForm, ConfirmSubmit, SubmitButton } from "@/components/client";
+import { ActionForm, ConfirmSubmit, FieldError, SubmitButton } from "@/components/client";
 import { Alert, Badge, btnClass, Card, DefList, fieldClass, fmtDateTime, PageHeader, rub, StatusBadge } from "@/components/ui";
 
 export default async function ContractPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ v?: string }> }) {
@@ -24,7 +25,8 @@ export default async function ContractPage({ params, searchParams }: { params: P
   if (!isOwner && !can(user.role, "contracts.manage") && !(can(user.role, "projects.view_all") && contract.projectId)) notFound();
   const current = contract.versions[0];
   const shown = contract.versions.find((x) => x.version === Number(v)) ?? current;
-  const customer = await db.user.findUnique({ where: { id: contract.customerId }, select: { name: true, email: true } });
+  const customer = await db.user.findUnique({ where: { id: contract.customerId }, select: { name: true, email: true, company: { select: { inn: true, kpp: true } } } });
+  const sbisReady = !!sbis();
   const accepted = contract.acceptances.find((a) => a.versionId === current.id);
   const signers = Object.fromEntries((await db.user.findMany({ where: { id: { in: contract.acceptances.map((a) => a.userId) } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
 
@@ -56,6 +58,11 @@ export default async function ContractPage({ params, searchParams }: { params: P
           <p className="mt-2 font-mono text-xs text-muted">Контрольная сумма: {shown.checksum.slice(0, 32)}…</p>
         </Card>
         <div className="space-y-6">
+          {isOwner && contract.status === "AWAITING_SIGNATURE" && contract.sbisDocumentId && (
+            <Alert tone="info" title="Можно подписать в ЭДО СБИС">
+              Договор отправлен вам через СБИС. Если ваша организация подключена к ЭДО, подпишите его там — статус обновится автоматически. Без ЭДО подпишите кодом из письма ниже.
+            </Alert>
+          )}
           {isOwner && contract.status === "AWAITING_SIGNATURE" && (
             <Card title="Подписание">
               <ContractSign contractId={contract.id} version={current.version} back={contract.quickOrder ? `/cabinet/quick-orders/${contract.quickOrder.id}` : undefined} />
@@ -63,10 +70,48 @@ export default async function ContractPage({ params, searchParams }: { params: P
           )}
           {accepted && (
             <Alert tone="success" title="Договор подписан">
-              {signers[accepted.userId]} · {fmtDateTime(accepted.acceptedAt)} · IP {accepted.ip} · редакция {accepted.version.version} · способ: простая ЭП (код из письма)
+              {signers[accepted.userId]} · {fmtDateTime(accepted.acceptedAt)} · IP {accepted.ip} · редакция {accepted.version.version} · способ: {accepted.method === "EXTERNAL_EDO" ? "КЭП в ЭДО СБИС" : "простая ЭП (код из письма)"}
             </Alert>
           )}
           {(contract.status === "SIGNED" || contract.payments.length > 0) && <ContractPayments user={user} contract={contract} payments={contract.payments} />}
+          {can(user.role, "contracts.manage") && !contract.quickOrder && (contract.status === "AWAITING_SIGNATURE" || contract.sbisDocumentId) && (
+            <Card title="Подписание через ЭДО СБИС">
+              {contract.sbisDocumentId ? (
+                <div className="space-y-2 text-sm">
+                  <p>
+                    Состояние в СБИС: <span className="font-medium">{contract.sbisStateName ?? "—"}</span>
+                    {contract.sbisSentAt && <span className="text-muted"> · загружен {fmtDateTime(contract.sbisSentAt)}</span>}
+                  </p>
+                  {contract.status === "AWAITING_SIGNATURE" && <p className="text-muted">Откройте документ в Saby, подпишите своей КЭП и отправьте заказчику. Когда он подпишет, договор здесь станет «Подписан» автоматически (проверка раз в 5 минут).</p>}
+                  {contract.sbisLink && (
+                    <a href={contract.sbisLink} target="_blank" rel="noopener" className={btnClass("primary", "sm")}>
+                      Открыть в Saby
+                    </a>
+                  )}
+                </div>
+              ) : !sbisReady ? (
+                <p className="text-sm text-muted">СБИС не подключён. Заказчик подписывает договор кодом из письма.</p>
+              ) : (
+                <ActionForm action={sendSbisAction} className="space-y-3">
+                  <input type="hidden" name="contractId" value={contract.id} />
+                  <p className="text-xs text-muted">Для заказчиков с ЭДО. Договор загрузится в ваш СБИС как документ «Договор»; подписание кодом из письма остаётся доступным.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">ИНН заказчика *</span>
+                      <input name="inn" required inputMode="numeric" defaultValue={customer?.company?.inn ?? ""} className={fieldClass} />
+                      <FieldError name="inn" />
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">КПП (для организаций)</span>
+                      <input name="kpp" inputMode="numeric" defaultValue={customer?.company?.kpp ?? ""} className={fieldClass} />
+                      <FieldError name="kpp" />
+                    </label>
+                  </div>
+                  <SubmitButton size="sm">Отправить в СБИС</SubmitButton>
+                </ActionForm>
+              )}
+            </Card>
+          )}
           <Card title="Основание">
             <DefList
               items={[

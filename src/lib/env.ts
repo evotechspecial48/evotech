@@ -32,6 +32,10 @@ const schema = z.object({
   // Т-Бизнес: токен T-API (Интеграции → T-API) с доступами «Выставление счетов» и «Выставление ссылок через СБП»
   TBANK_BUSINESS_TOKEN: z.string().optional(),
   TBANK_BUSINESS_API_URL: z.string().default("https://business.tbank.ru/openapi"),
+  // ЭДО СБИС (Saby): логин и пароль отдельного пользователя с правами на ЭДО; тестовый стенд — https://fix-online.sbis.ru
+  SBIS_LOGIN: z.string().optional(),
+  SBIS_PASSWORD: z.string().optional(),
+  SBIS_API_URL: z.string().default("https://online.sbis.ru"),
 });
 
 export const env = schema.parse(process.env);

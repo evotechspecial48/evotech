@@ -77,6 +77,7 @@ export const AUDIT_LABELS: Record<string, string> = {
   "contract.create": "Формирование договора",
   "contract.otp": "Запрошен код подтверждения",
   "contract.accept": "Договор подтверждён",
+  "contract.sbis": "Отправка договора в СБИС",
   "payment.create": "Создание платежа",
   "payment.webhook": "Уведомление банка",
   "payment.status": "Изменение статуса платежа",

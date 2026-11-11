@@ -10,6 +10,8 @@ import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, ass
 import { createManualProject } from "@/services/customers";
 import { requestPasswordReset, resetPassword, updateUser } from "@/services/users";
 import { cancelInvoice, issueContractPayment, markPaidManually } from "@/services/invoices";
+import { sendContractToSbis, syncSbisContracts } from "@/services/edo";
+import { MockSbisClient, setSbisClient } from "@/lib/edo/sbis";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
 import { saveGenerated } from "@/services/files";
@@ -332,6 +334,38 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     // Заявку с проектом удалить нельзя
     const withProject = await db.lead.findFirstOrThrow({ where: { project: { isNot: null } } });
     await expect(deleteLead(director, withProject.id, "проверка")).rejects.toBeInstanceOf(UserError);
+  });
+
+  it("ЭДО СБИС: отправка договора, подписание контрагентом → «Подписан», файлы с подписями в документах; код из письма остаётся", async () => {
+    const mock = new MockSbisClient();
+    setSbisClient(mock);
+    try {
+      const lead = await createLead({ title: "КМД через ЭДО", contactName: "Сидоров", email: "edo@t.ru", source: "phone" }, sales, null);
+      const contract = await createLeadContract(sales, lead.id, 90000, 15);
+      await expect(sendContractToSbis(designer, contract.id, { inn: "4800000003", kpp: "480001001" })).rejects.toBeInstanceOf(ForbiddenError);
+      await expect(sendContractToSbis(sales, contract.id, { inn: "123", kpp: "" })).rejects.toBeInstanceOf(UserError);
+      await expect(sendContractToSbis(sales, contract.id, { inn: "4800000003", kpp: "" })).rejects.toBeInstanceOf(UserError); // организации нужен КПП
+
+      const sent = await sendContractToSbis(sales, contract.id, { inn: "4800000003", kpp: "480001001" });
+      const doc = mock.docs.get(sent.id)!;
+      expect(doc.input.counterparty).toMatchObject({ inn: "4800000003", kpp: "480001001" });
+      expect(doc.input.file.data.subarray(0, 4).toString()).toBe("%PDF");
+      await expect(sendContractToSbis(sales, contract.id, { inn: "4800000003", kpp: "480001001" })).rejects.toBeInstanceOf(UserError); // повторно — нельзя
+
+      // Пока контрагент не подписал — договор ждёт; подписание кодом из письма по-прежнему доступно
+      expect(await syncSbisContracts()).toBe(0);
+      expect((await db.contract.findUniqueOrThrow({ where: { id: contract.id } })).status).toBe("AWAITING_SIGNATURE");
+
+      Object.assign(doc, { code: "7", name: "Выполнение завершено успешно", files: [{ name: "Договор.pdf", url: "https://example.test/1" }, { name: "Договор.pdf.sgn", url: "https://example.test/2" }] });
+      expect(await syncSbisContracts()).toBe(1);
+      const signed = await db.contract.findUniqueOrThrow({ where: { id: contract.id }, include: { acceptances: true } });
+      expect(signed.status).toBe("SIGNED");
+      expect(signed.acceptances[0].method).toBe("EXTERNAL_EDO");
+      expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("contract_signed");
+      expect(await db.fileAsset.count({ where: { leadId: lead.id, originalName: { startsWith: `СБИС_${contract.number}` } } })).toBe(2);
+    } finally {
+      setSbisClient(null);
+    }
   });
 
   it("журнал фиксирует критичные действия", async () => {

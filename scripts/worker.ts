@@ -1,11 +1,12 @@
 // Фоновый воркер: AI-задачи (в т.ч. зависшие после перезапуска), повторная отправка писем,
-// обновление состояния таймеров и предупреждения о сроках, сверка счетов и QR СБП с Т-Бизнесом.
+// обновление состояния таймеров и предупреждения о сроках, сверка счетов и QR СБП с Т-Бизнесом, статусы договоров в ЭДО СБИС.
 // Запуск: npm run worker (переменные окружения — из .env).
 
 import { runPendingJobs } from "../src/services/ai-jobs";
 import { retryFailedEmails } from "../src/lib/mailer";
 import { refreshTimers } from "../src/services/timer";
 import { syncBankPayments } from "../src/services/invoices";
+import { syncSbisContracts } from "../src/services/edo";
 import { logger } from "../src/lib/logger";
 
 const TICK_MS = 5_000;
@@ -23,6 +24,8 @@ async function tick() {
       if (warned) logger.info("worker.deadline_warnings", { warned });
       const paid = await syncBankPayments();
       if (paid) logger.info("worker.bank_payments", { changed: paid });
+      const edo = await syncSbisContracts();
+      if (edo) logger.info("worker.sbis_contracts", { changed: edo });
     }
     if (jobs || mails) logger.info("worker.tick", { jobs, mails });
   } catch (err) {

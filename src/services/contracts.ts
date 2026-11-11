@@ -180,7 +180,8 @@ export async function reviseContract(user: SessionUser, contractId: string, body
   const version = contract.currentVersion + 1;
   await db.$transaction([
     db.contractVersion.create({ data: { contractId, version, body, checksum: checksum(body), createdById: user.id } }),
-    db.contract.update({ where: { id: contractId }, data: { currentVersion: version, amount, termDays, status: "AWAITING_SIGNATURE" } }),
+    // Документ в СБИС относится к прежней редакции — новую нужно отправить заново
+    db.contract.update({ where: { id: contractId }, data: { currentVersion: version, amount, termDays, status: "AWAITING_SIGNATURE", sbisDocumentId: null, sbisStateCode: null, sbisStateName: null, sbisLink: null, sbisSentAt: null } }),
     db.authToken.deleteMany({ where: { type: "CONTRACT_OTP", subjectId: { not: null }, usedAt: null, user: { id: contract.customerId } } }),
   ]);
   await audit({ actorId: user.id, action: "contract.create", entityType: "Contract", entityId: contractId, meta: { version } });
@@ -235,13 +236,25 @@ export async function acceptContract(user: SessionUser, contractId: string, code
     await db.authToken.update({ where: { id: token.id }, data: { attempts: { increment: 1 } } });
     throw new UserError("Неверный код", { code: "Неверный код" });
   }
+  await db.authToken.update({ where: { id: token.id }, data: { usedAt: new Date() } });
+  await markContractSigned(contract, version, { userId: user.id, method: "CHECKBOX_OTP", ip, userAgent, via: "в кабинете" });
+}
+
+/**
+ * Фиксация подписания (код из письма или ЭДО СБИС): подтверждение редакции, статус «Подписан»,
+ * запуск таймера проекта, статус заявки «Договор подписан», уведомления.
+ */
+export async function markContractSigned(
+  contract: { id: string; number: string; quickOrderId: string | null; projectId: string | null; leadId: string | null },
+  version: { id: string; version: number; checksum: string },
+  opts: { userId: string; method: "CHECKBOX_OTP" | "EXTERNAL_EDO"; ip?: string | null; userAgent?: string | null; via: string },
+) {
   const now = new Date();
   await db.$transaction(async (tx) => {
-    await tx.authToken.update({ where: { id: token.id }, data: { usedAt: now } });
     await tx.contractAcceptance.create({
-      data: { contractId, versionId: version.id, userId: user.id, method: "CHECKBOX_OTP", ip, userAgent, checksum: version.checksum },
+      data: { contractId: contract.id, versionId: version.id, userId: opts.userId, method: opts.method, ip: opts.ip ?? null, userAgent: opts.userAgent ?? null, checksum: version.checksum },
     });
-    await tx.contract.update({ where: { id: contractId }, data: { status: "SIGNED", signedAt: now } });
+    await tx.contract.update({ where: { id: contract.id }, data: { status: "SIGNED", signedAt: now } });
     if (contract.quickOrderId) {
       await tx.quickOrder.update({ where: { id: contract.quickOrderId }, data: { status: "AWAITING_PAYMENT" } });
     }
@@ -250,7 +263,7 @@ export async function acceptContract(user: SessionUser, contractId: string, code
       await tx.timer.updateMany({ where: { projectId: contract.projectId, startedAt: null }, data: { startedAt: now, state: "running" } });
     }
   });
-  await audit({ actorId: user.id, action: "contract.accept", entityType: "Contract", entityId: contractId, ip, meta: { version: version.version, checksum: version.checksum } });
+  await audit({ actorId: opts.userId, action: "contract.accept", entityType: "Contract", entityId: contract.id, ip: opts.ip ?? null, meta: { version: version.version, checksum: version.checksum, method: opts.method } });
   if (contract.projectId) {
     const project = await db.project.findUnique({ where: { id: contract.projectId }, select: { number: true, managerId: true, salesManagerId: true } });
     await notify([project?.managerId, project?.salesManagerId], "status.changed", `Заказчик подписал договор ${contract.number}`, `Проект №${project?.number}: таймер срока запущен.`, `/cabinet/projects/${contract.projectId}`);
@@ -259,7 +272,7 @@ export async function acceptContract(user: SessionUser, contractId: string, code
     if (lead && !["won", "lost", "contract_signed"].includes(lead.status)) {
       await db.$transaction([
         db.lead.update({ where: { id: contract.leadId }, data: { status: "contract_signed" } }),
-        db.statusChange.create({ data: { entityType: "Lead", entityId: contract.leadId, fromStatus: lead.status, toStatus: "contract_signed", actorId: user.id, comment: `Договор ${contract.number} подписан в кабинете` } }),
+        db.statusChange.create({ data: { entityType: "Lead", entityId: contract.leadId, fromStatus: lead.status, toStatus: "contract_signed", actorId: opts.userId, comment: `Договор ${contract.number} подписан ${opts.via}` } }),
       ]);
     }
     await notify([lead?.managerId], "status.changed", `Заказчик подписал договор ${contract.number}`, `Заявка №${lead?.number}. Можно создавать проект.`, `/cabinet/leads/${contract.leadId}`);
