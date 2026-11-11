@@ -134,6 +134,7 @@ export const FILE_CATEGORY: Record<string, string> = {
   MODEL: "3D-модель",
   DRAWING: "Чертежи",
   SPECIFICATION: "Спецификации и ведомости",
+  TZ: "Готовое ТЗ (файл)",
   DOCUMENT: "Документы",
   CONTRACT: "Договор",
   ARCHIVE: "Архив",

@@ -226,6 +226,14 @@ export async function assignTeamAction(_: ActionState, fd: FormData): Promise<Ac
   });
 }
 
+export async function memberPayAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("projects.manage");
+    await projects.setMemberPay(user, str(fd, "projectId"), str(fd, "userId"), num(fd, "fee"), num(fd, "advance"));
+    return { ok: true, message: "Оплата сохранена" };
+  });
+}
+
 export async function projectStatusAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const user = await actor("projects.manage");
@@ -456,6 +464,46 @@ export async function saveFinanceAction(_: ActionState, fd: FormData): Promise<A
     const user = await actor("analytics.view");
     await finance.saveFinanceMonth(user, str(fd, "month"), { sro: num(fd, "sro") ?? 0, ads: num(fd, "ads") ?? 0, adsPlatforms: num(fd, "adsPlatforms") ?? 0, other: num(fd, "other") ?? 0 });
     return { ok: true, message: "Расходы месяца сохранены" };
+  });
+}
+
+const fileOf = (fd: FormData, key: string) => {
+  const v = fd.get(key);
+  return v instanceof File ? v : new File([], "");
+};
+
+export async function uploadOfferAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("offers.manage");
+    const { ip } = await clientInfo();
+    await leads.uploadOffer(user, str(fd, "leadId"), fileOf(fd, "file"), num(fd, "total") ?? 0, num(fd, "termDays") ?? 0, num(fd, "validDays") ?? 14, ip);
+    return { ok: true, message: "Готовое КП загружено" };
+  });
+}
+
+export async function deleteOfferAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("offers.manage");
+    await leads.deleteOffer(user, str(fd, "offerId"));
+    return { ok: true, message: "КП удалено" };
+  });
+}
+
+export async function uploadContractAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("contracts.manage");
+    const { ip } = await clientInfo();
+    const c = await contracts.uploadLeadContract(user, str(fd, "leadId"), fileOf(fd, "file"), { number: str(fd, "number", 60), amount: num(fd, "amount") ?? 0, termDays: num(fd, "termDays") ?? 0, signed: fd.get("signed") === "on" }, ip);
+    return { ok: true, message: `Договор ${c.number} загружен` };
+  });
+}
+
+export async function deleteContractAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("contracts.manage");
+    const leadId = str(fd, "leadId");
+    await contracts.deleteContract(user, str(fd, "contractId"));
+    return { ok: true, message: "Договор удалён", data: { redirect: leadId ? `/cabinet/leads/${leadId}` : "/cabinet/contracts" } };
   });
 }
 

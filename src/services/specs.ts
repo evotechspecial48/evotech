@@ -64,11 +64,17 @@ export async function saveSpec(user: SessionUser, specId: string, raw: Record<st
   return { changed: changed.length };
 }
 
+/** Готовое ТЗ, приложенное файлом (категория «Готовое ТЗ»), заменяет заполнение обязательных полей. */
+async function hasReadyTzFile(ctx: { projectId: string | null; leadId: string | null }) {
+  const where = ctx.projectId ? { projectId: ctx.projectId } : ctx.leadId ? { leadId: ctx.leadId } : null;
+  return !!where && (await db.fileAsset.count({ where: { ...where, category: "TZ", deletedAt: null } })) > 0;
+}
+
 export async function submitSpec(user: SessionUser, specId: string) {
   const { spec, ctx } = await getSpecForUser(user, specId);
   if (!["DRAFT", "CLARIFICATION"].includes(spec.status)) throw new UserError("ТЗ уже отправлено или утверждено");
-  const missing = missingRequired(spec.data as SpecData);
-  if (missing.length) throw new UserError(`Заполните обязательные поля: ${missing.map((m) => m.label).join(", ")}`);
+  const missing = (await hasReadyTzFile(ctx)) ? [] : missingRequired(spec.data as SpecData);
+  if (missing.length) throw new UserError(`Заполните обязательные поля или приложите готовое ТЗ файлом: ${missing.map((m) => m.label).join(", ")}`);
   if (spec.currentVersion === 0) {
     await db.technicalSpecificationVersion.create({
       data: { specId, version: 1, data: spec.data as Prisma.InputJsonValue, changedKeys: Object.keys(spec.data as object), authorId: user.id, checksum: checksum(spec.data), changeNote: "Первая версия" },
@@ -99,8 +105,8 @@ export async function approveSpec(user: SessionUser, specId: string) {
   const { spec, ctx } = await getSpecForUser(user, specId);
   if (spec.status !== "SUBMITTED") throw new UserError("Утверждается ТЗ в статусе «На проверке»");
   const data = spec.data as SpecData;
-  const missing = missingRequired(data);
-  if (missing.length) throw new UserError(`Не заполнены поля: ${missing.map((m) => m.label).join(", ")}`);
+  const missing = (await hasReadyTzFile(ctx)) ? [] : missingRequired(data);
+  if (missing.length) throw new UserError(`Не заполнены поля (или приложите готовое ТЗ файлом): ${missing.map((m) => m.label).join(", ")}`);
   const version = spec.currentVersion + 1;
   await db.$transaction(async (tx) => {
     const snap = await tx.technicalSpecificationVersion.create({

@@ -4,15 +4,15 @@ import type { SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ForbiddenError } from "@/domain/rbac";
 import { UserError } from "@/lib/errors";
-import { createLead, changeLeadStatus, createOffer, deleteLead, updateLeadContacts, updateOffer } from "@/services/leads";
-import { acceptContract, createLeadContract, requestContractOtp } from "@/services/contracts";
-import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject } from "@/services/projects";
+import { createLead, changeLeadStatus, createOffer, deleteLead, deleteOffer, updateLeadContacts, updateOffer, uploadOffer } from "@/services/leads";
+import { acceptContract, createLeadContract, deleteContract, requestContractOtp, uploadLeadContract } from "@/services/contracts";
+import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject, setMemberPay } from "@/services/projects";
 import { createManualProject } from "@/services/customers";
 import { requestPasswordReset, resetPassword, updateUser } from "@/services/users";
 import { cancelInvoice, issueContractPayment, markPaidManually } from "@/services/invoices";
 import { sendContractToSbis, syncSbisContracts } from "@/services/edo";
 import { MockSbisClient, setSbisClient } from "@/lib/edo/sbis";
-import { getFinance, saveFinanceMonth } from "@/services/finance";
+import { getFinance, getSalary, saveFinanceMonth } from "@/services/finance";
 import { monthRange } from "@/domain/months";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
@@ -379,6 +379,44 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     const signed = await db.contract.aggregate({ where: { status: "SIGNED", signedAt: { gte: monthRange(row.month).from } }, _sum: { amount: true } });
     expect(row.revenue).toBe(signed._sum.amount ?? 0);
     expect(row.profit).toBe(row.revenue - row.designers - row.pm - row.managers - row.tax - 43850 - 2700 - 40000 - 13266);
+  });
+
+  it("готовые КП и договор файлом, удаление ошибочных, «Договор подписан» вручную создаёт проект, оплата и зарплата", async () => {
+    const pdf = (name: string) => new File([Buffer.from("%PDF-1.4 test")], name, { type: "application/pdf" });
+    const lead = await createLead({ title: "КМД склада", contactName: "Орлов", email: "orlov@t.ru", source: "phone" }, sales, null);
+
+    // КП файлом: сумма и срок для учёта, PDF отдаётся загруженный; удаление ошибочного КП
+    const offer = await uploadOffer(sales, lead.id, pdf("КП.pdf"), 120000, 15, 10, null);
+    expect(offer.fileId).toBeTruthy();
+    expect(offer.total).toBe(120000);
+    await expect(deleteOffer(designer, offer.id)).rejects.toBeInstanceOf(ForbiddenError);
+    await deleteOffer(sales, offer.id);
+    expect(await db.commercialOffer.findUnique({ where: { id: offer.id } })).toBeNull();
+
+    // Ошибочный договор (не подписан) удаляется, заявка возвращается в «КП»
+    const wrong = await uploadLeadContract(sales, lead.id, pdf("Договор-ошибка.pdf"), { number: "", amount: 100000, termDays: 10, signed: false }, null);
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("awaiting_signature");
+    await deleteContract(sales, wrong.id);
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("commercial_offer");
+
+    // Договор файлом без подписи → «Договор подписан» вручную → договор подписан вне кабинета, проект создан
+    const c = await uploadLeadContract(sales, lead.id, pdf("Договор.pdf"), { number: "", amount: 120000, termDays: 15, signed: false }, null);
+    await changeLeadStatus(sales, lead.id, "contract_signed", "");
+    const signed = await db.contract.findUniqueOrThrow({ where: { id: c.id }, include: { acceptances: true } });
+    expect([signed.status, signed.acceptances[0].method]).toEqual(["SIGNED", "OFFLINE"]);
+    const project = await db.project.findUniqueOrThrow({ where: { leadId: lead.id } });
+    await expect(deleteContract(director, c.id)).rejects.toBeInstanceOf(UserError); // по договору есть проект
+
+    // Оплата проектировщика — РП/директор; зарплата по месяцам
+    await assignTeam(director, project.id, pm.id, [designer.id]);
+    await expect(setMemberPay(designer, project.id, designer.id, 50000, 10000)).rejects.toBeInstanceOf(ForbiddenError);
+    await setMemberPay(pm, project.id, designer.id, 50000, 10000);
+    const month = (await getSalary(designer, 1))[0];
+    expect(month.amount).toBeGreaterThanOrEqual(50000);
+    const pmSalary = (await getSalary(pm, 1))[0];
+    expect(pmSalary.amount).toBeGreaterThanOrEqual(50000);
+    const salesSalary = (await getSalary(sales, 1))[0];
+    expect(salesSalary.amount).toBeGreaterThanOrEqual(30000 + Math.round(120000 * 0.03));
   });
 
   it("журнал фиксирует критичные действия", async () => {

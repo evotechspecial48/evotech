@@ -1,6 +1,8 @@
 // Просмотр текста договора в кабинете — та же разметка, что у PDF (src/lib/pdf.ts → textToPdf):
 // «# » раздел, «^ »/«^^ » по центру, «| … |» таблица («||» — без рамок), «<br>» перенос, «---» линия, «===» новая страница.
 
+import { normalizeNewlines, tabColumns } from "@/lib/doc-markup";
+
 function cells(line: string) {
   return line
     .trim()
@@ -24,10 +26,25 @@ function Cell({ text }: { text: string }) {
 }
 
 export function DocBody({ body }: { body: string }) {
-  const blocks = body.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  const blocks = normalizeNewlines(body).split(/\n{2,}/).filter((b) => b.trim());
   return (
     <div className="space-y-3 text-sm leading-relaxed">
-      {blocks.map((block, bi) => {
+      {blocks.map((raw, bi) => {
+        const columns = tabColumns(raw);
+        if (columns)
+          return (
+            <table key={bi} className="w-full text-left text-xs">
+              <tbody>
+                {columns.map(([l, r], ri) => (
+                  <tr key={ri}>
+                    <td className="w-1/2 py-0.5 pr-4 align-top">{l}</td>
+                    <td className="w-1/2 py-0.5 align-top">{r}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+        const block = raw.trim();
         const lines = block.split("\n");
         if (lines.every((l) => l.trim().startsWith("|"))) {
           const borderless = lines[0].trim().startsWith("||");

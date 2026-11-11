@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/domain/rbac";
 import { CONTRACT_STATUS } from "@/domain/labels";
-import { contractCancelAction, contractReviseAction, contractRevisionAction, sendSbisAction } from "@/app/actions/cabinet";
+import { contractCancelAction, contractReviseAction, contractRevisionAction, deleteContractAction, sendSbisAction } from "@/app/actions/cabinet";
 import { sbis } from "@/lib/edo/sbis";
 import { ContractSign } from "@/components/cabinet/contract-sign";
 import { ContractPayments } from "@/components/cabinet/contract-payments";
@@ -40,7 +40,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
           <>
             <StatusBadge map={CONTRACT_STATUS} value={contract.status} />
             <a href={`/api/contracts/${contract.id}/pdf?v=${shown.version}`} target="_blank" rel="noopener" className={btnClass("secondary", "sm")}>
-              PDF редакции {shown.version}
+              {contract.fileId && contract.versions.length === 1 ? "Файл договора" : `PDF редакции ${shown.version}`}
             </a>
           </>
         }
@@ -70,7 +70,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
           )}
           {accepted && (
             <Alert tone="success" title="Договор подписан">
-              {signers[accepted.userId]} · {fmtDateTime(accepted.acceptedAt)} · IP {accepted.ip} · редакция {accepted.version.version} · способ: {accepted.method === "EXTERNAL_EDO" ? "КЭП в ЭДО СБИС" : "простая ЭП (код из письма)"}
+              {signers[accepted.userId]} · {fmtDateTime(accepted.acceptedAt)} {accepted.ip ? ` · IP ${accepted.ip}` : ""} · редакция {accepted.version.version} · способ: {accepted.method === "EXTERNAL_EDO" ? "КЭП в ЭДО СБИС" : accepted.method === "OFFLINE" ? "на бумаге / вне кабинета (отмечено сотрудником)" : "простая ЭП (код из письма)"}
             </Alert>
           )}
           {(contract.status === "SIGNED" || contract.payments.length > 0) && <ContractPayments user={user} contract={contract} payments={contract.payments} />}
@@ -179,6 +179,15 @@ export default async function ContractPage({ params, searchParams }: { params: P
                   Аннулировать
                 </ConfirmSubmit>
               </ActionForm>
+              {!contract.project && !contract.quickOrder && (contract.status !== "SIGNED" || user.role === "DIRECTOR") && (
+                <ActionForm action={deleteContractAction} className="mt-3">
+                  <input type="hidden" name="contractId" value={contract.id} />
+                  <input type="hidden" name="leadId" value={contract.lead?.id ?? ""} />
+                  <ConfirmSubmit title="Удалить договор?" text="Ошибочный договор и все его редакции будут удалены без возможности восстановления. В журнале останется запись.">
+                    Удалить договор
+                  </ConfirmSubmit>
+                </ActionForm>
+              )}
             </Card>
           )}
         </div>

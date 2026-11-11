@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { normalizeNewlines, tabColumns } from "./doc-markup";
 
 // Формирование PDF с кириллицей (шрифт DejaVu Sans, лицензия — assets/fonts/LICENSE-DejaVu.txt).
 
@@ -190,9 +191,15 @@ export async function createPdf(title: string): Promise<PdfWriter> {
  */
 export async function textToPdf(title: string, body: string): Promise<Buffer> {
   const pdf = await createPdf(title);
-  for (const block of body.split(/\n{2,}/)) {
+  for (const block of normalizeNewlines(body).split(/\n{2,}/)) {
     const trimmed = block.trim();
     if (!trimmed) continue;
+    // Две колонки, свёрстанные табуляцией (текст из Word), — таблица без рамок
+    const columns = tabColumns(block);
+    if (columns) {
+      pdf.table(columns, { borderless: true, widths: [0.5, 0.5] });
+      continue;
+    }
     const lines = trimmed.split("\n");
     if (lines.every((l) => l.trim().startsWith("|"))) {
       const borderless = lines[0].trim().startsWith("||");

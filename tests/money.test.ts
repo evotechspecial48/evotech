@@ -74,3 +74,18 @@ describe("финансы директора", () => {
     expect(computeFinance({ revenue: 100000, designers: 0, managerBases: [0], sro: 0, ads: 0, adsPlatforms: 0, other: 0 })).toMatchObject({ pm: 50000, managers: 30000, tax: 8000 });
   });
 });
+
+describe("реквизиты в две колонки из текста Word", () => {
+  it("строки с табуляцией делятся на колонки, строки с отступом — продолжение правой", async () => {
+    const { tabColumns, normalizeNewlines } = await import("@/lib/doc-markup");
+    const block = normalizeNewlines("ЗАКАЗЧИК:\t\t\t\t\t\tИСПОЛНИТЕЛЬ: \r\nИП Будницкий Г.Е.\t        ИП Левонидских Е.О.\r\nР/с: 40802810920001149347\r\nТел. 8-928-043-22-20\t      Адрес: 398001, г. Липецк,\r\n                                      ул. 8 Марта 17/2");
+    expect(tabColumns(block)).toEqual([
+      ["ЗАКАЗЧИК:", "ИСПОЛНИТЕЛЬ:"],
+      ["ИП Будницкий Г.Е.", "ИП Левонидских Е.О."],
+      ["Р/с: 40802810920001149347", ""],
+      ["Тел. 8-928-043-22-20", "Адрес: 398001, г. Липецк,"],
+      ["", "ул. 8 Марта 17/2"],
+    ]);
+    expect(tabColumns("Обычный абзац\tс одной табуляцией")).toBeNull();
+  });
+});

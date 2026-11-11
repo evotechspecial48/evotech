@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AnalyticsView } from "@/components/cabinet/analytics-view";
+import { SalaryCard } from "@/components/cabinet/salary-card";
 import { requireUser, type SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { LEAD_STATUS, QUICK_ORDER_STATUS, STAGE_STATUS } from "@/domain/labels";
@@ -15,7 +16,19 @@ export default async function AnalyticsHome({ searchParams }: { searchParams: Pr
   const user = await requireUser();
   const sp = await searchParams;
   if (user.role === "DIRECTOR") return <AnalyticsView user={user} sp={sp} />;
-  if (user.role === "PROJECT_MANAGER") return <AnalyticsView user={user} sp={sp} intro={<ManagerDash user={user} />} />;
+  if (user.role === "PROJECT_MANAGER")
+    return (
+      <AnalyticsView
+        user={user}
+        sp={sp}
+        intro={
+          <>
+            <SalaryCard user={user} />
+            <ManagerDash user={user} />
+          </>
+        }
+      />
+    );
   return (
     <>
       <PageHeader title="Аналитика" subtitle={`Здравствуйте, ${user.name.split(" ")[0]}! · ${ROLE_LABELS[user.role]}`} />
@@ -31,6 +44,7 @@ export default async function AnalyticsHome({ searchParams }: { searchParams: Pr
           </Alert>
         </div>
       )}
+      {user.role !== "CUSTOMER" && <SalaryCard user={user} />}
       {user.role === "CUSTOMER" ? <CustomerDash user={user} /> : user.role === "SALES_MANAGER" ? <SalesDash user={user} /> : <DesignerDash user={user} />}
     </>
   );

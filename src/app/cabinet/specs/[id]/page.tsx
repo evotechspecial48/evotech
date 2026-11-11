@@ -24,7 +24,7 @@ export default async function SpecPage({ params, searchParams }: { params: Promi
   const editable =
     !viewing && spec.status !== "APPROVED" && can(user.role, "spec.edit") && (isCustomer ? spec.status !== "SUBMITTED" : true);
   const files = await db.fileAsset.findMany({
-    where: { deletedAt: null, category: { in: ["SOURCE", "PHOTO", "DRAWING"] }, ...(ctx.projectId ? { projectId: ctx.projectId } : { leadId: ctx.leadId }), ...(isCustomer ? { internal: false } : {}) },
+    where: { deletedAt: null, category: { in: ["TZ", "SOURCE", "PHOTO", "DRAWING"] }, ...(ctx.projectId ? { projectId: ctx.projectId } : { leadId: ctx.leadId }), ...(isCustomer ? { internal: false } : {}) },
     orderBy: { createdAt: "desc" },
   });
   const groups = [...new Set(SPEC_FIELDS.map((f) => f.group))];
@@ -112,13 +112,14 @@ export default async function SpecPage({ params, searchParams }: { params: Promi
             )}
           </ActionForm>
 
-          <Card title="Вложения: фото, схемы, исходные файлы">
+          <Card title="Вложения: готовое ТЗ, фото, схемы, исходные файлы">
             <FileList files={files} />
             {spec.status !== "APPROVED" && (
               <div className="mt-4">
                 <FileUploader
                   target={ctx.projectId ? { projectId: ctx.projectId } : { leadId: ctx.leadId ?? undefined }}
                   categories={[
+                    { value: "TZ", label: "Готовое ТЗ (файл)" },
                     { value: "SOURCE", label: "Исходные данные" },
                     { value: "PHOTO", label: "Фотографии" },
                     { value: "DRAWING", label: "Чертежи и схемы" },

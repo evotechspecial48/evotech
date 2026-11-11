@@ -229,6 +229,8 @@ model CommercialOffer {
   termDays    Int
   validUntil  DateTime
   notes       String?
+  // Готовое КП, загруженное файлом (вместо формирования по бланку)
+  fileId      String?
   status      OfferStatus @default(DRAFT)
   createdById String
   createdAt   DateTime    @default(now())
@@ -520,6 +522,8 @@ enum FileCategory {
   MODEL
   DRAWING
   SPECIFICATION
+  // Готовое ТЗ, оформленное отдельно (файлом)
+  TZ
   DOCUMENT
   CONTRACT
   ARCHIVE
@@ -610,6 +614,8 @@ model Contract {
   sbisSentAt     DateTime?
   // Редакция ранее выполненного проекта — не входит в бонус менеджера (3%)
   isRevision     Boolean        @default(false)
+  // Готовый договор, загруженный файлом (Word/PDF), — показывается вместо текста по шаблону
+  fileId         String?
   createdAt      DateTime       @default(now())
   versions       ContractVersion[]
   acceptances    ContractAcceptance[]
@@ -634,6 +640,8 @@ model ContractVersion {
 enum SignMethod {
   CHECKBOX_OTP
   EXTERNAL_EDO
+  // Подписан на бумаге или вне кабинета — отмечен сотрудником
+  OFFLINE
 }
 
 model ContractAcceptance {

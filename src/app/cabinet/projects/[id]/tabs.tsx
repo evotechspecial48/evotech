@@ -12,6 +12,7 @@ import { requisitesLine } from "@/services/customers";
 import {
   answerRequestAction,
   assignTeamAction,
+  memberPayAction,
   cancelRequestAction,
   completeProjectAction,
   createRequestAction,
@@ -200,6 +201,32 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
                 </fieldset>
                 <SubmitButton size="sm">Сохранить команду</SubmitButton>
               </ActionForm>
+            </details>
+          )}
+          {manage && project.members.length > 0 && (
+            <details className="mt-3 rounded-lg border border-line p-3">
+              <summary className="cursor-pointer text-sm font-medium">Оплата проектировщикам</summary>
+              <div className="mt-3 space-y-3">
+                {project.members.map((m) => (
+                  <ActionForm key={m.id} action={memberPayAction} className="grid items-end gap-2 sm:grid-cols-[1fr_8rem_8rem_auto]">
+                    <input type="hidden" name="projectId" value={projectId} />
+                    <input type="hidden" name="userId" value={m.userId} />
+                    <span className="text-sm font-medium">{m.user.name}</span>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">Оплата, ₽</span>
+                      <input name="fee" type="number" min={0} defaultValue={m.fee ?? ""} className={fieldClass} />
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">Аванс, ₽</span>
+                      <input name="advance" type="number" min={0} defaultValue={m.advance ?? ""} className={fieldClass} />
+                    </label>
+                    <SubmitButton size="sm" variant="secondary">
+                      Сохранить
+                    </SubmitButton>
+                  </ActionForm>
+                ))}
+                <p className="text-xs text-muted">Оплата попадает в зарплату проектировщика за месяц проекта (по дате подписания договора) и в финансы директора.</p>
+              </div>
             </details>
           )}
         </Card>

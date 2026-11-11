@@ -132,6 +132,17 @@ export async function assignTeam(user: SessionUser, projectId: string, managerId
   }
 }
 
+/** Оплата проектировщика по проекту (₽) — вносит руководитель проекта или директор; идёт в зарплату по месяцу проекта. */
+export async function setMemberPay(user: SessionUser, projectId: string, memberUserId: string, fee: number | null, advance: number | null) {
+  const access = await loadProjectAccess(user, projectId);
+  if (!access.canManage) throw new ForbiddenError("Оплату проектировщика вносит руководитель проекта или директор");
+  for (const n of [fee, advance]) if (n !== null && (!Number.isFinite(n) || n < 0 || n > 1e9)) throw new UserError("Сумма — целое число от 0");
+  const member = await db.projectMember.findUnique({ where: { projectId_userId: { projectId, userId: memberUserId } } });
+  if (!member) throw new UserError("Проектировщик не назначен на проект");
+  await db.projectMember.update({ where: { id: member.id }, data: { fee: fee === null ? null : Math.round(fee), advance: advance === null ? null : Math.round(advance) } });
+  await audit({ actorId: user.id, action: "project.pay", entityType: "Project", entityId: projectId, projectId, meta: { userId: memberUserId, fee, advance } });
+}
+
 export async function setProjectStatus(user: SessionUser, projectId: string, status: "ACTIVE" | "ON_HOLD" | "CANCELLED", comment: string) {
   const access = await loadProjectAccess(user, projectId);
   if (!access.canManage) throw new ForbiddenError();

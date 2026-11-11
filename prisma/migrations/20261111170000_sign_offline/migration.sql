@@ -1,0 +1,1 @@
+ALTER TYPE "SignMethod" ADD VALUE 'OFFLINE';

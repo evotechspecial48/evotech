@@ -7,7 +7,9 @@ import { CONTRACT_STATUS, LEAD_SOURCE, LEAD_STATUS, OFFER_STATUS, SPEC_STATUS } 
 import { loadLeadAccess } from "@/services/scope";
 import {
   convertLeadAction,
+  deleteContractAction,
   deleteLeadAction,
+  deleteOfferAction,
   ensureSpecAction,
   leadAssignAction,
   leadCommentAction,
@@ -16,6 +18,8 @@ import {
   offerStatusAction,
   toggleTaskAction,
   updateLeadContactsAction,
+  uploadContractAction,
+  uploadOfferAction,
 } from "@/app/actions/cabinet";
 import { ActionForm, ConfirmSubmit, FieldError, FileUploader, SubmitButton } from "@/components/client";
 import { CommentList, FileList, History } from "@/components/cabinet/shared";
@@ -147,7 +151,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                   <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5 text-sm">
                     <div>
                       <a href={`/api/offers/${o.id}/pdf`} target="_blank" rel="noopener" className="font-medium text-accent-700 hover:underline">
-                        КП №{o.number} (версия {o.version}) · PDF
+                        КП №{o.number} (версия {o.version}) · {o.fileId ? "файл" : "PDF"}
                       </a>
                       <p className="text-xs text-muted">
                         {rub(o.total)} · {o.termDays} раб. дн. · действует до {fmtDate(o.validUntil)}
@@ -158,33 +162,58 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                       {!isCustomer && o.status === "DRAFT" && <OfferBtn id={o.id} status="SENT" label="Отправить заказчику" />}
                       {isCustomer && o.status === "SENT" && (
                         <>
-                          <OfferBtn id={o.id} status="ACCEPTED" label="Принять" />
-                          <OfferBtn id={o.id} status="REJECTED" label="Отклонить" variant="secondary" />
-                        </>
+                            <OfferBtn id={o.id} status="ACCEPTED" label="Принять" />
+                            <OfferBtn id={o.id} status="REJECTED" label="Отклонить" variant="secondary" />
+                          </>
+                        )}
+                      </div>
+                      {can(user.role, "offers.manage") && (
+                        <ActionForm action={deleteOfferAction}>
+                          <input type="hidden" name="offerId" value={o.id} />
+                          <ConfirmSubmit title={`Удалить КП №${o.number}?`} text="КП будет удалено из заявки без возможности восстановления. Загруженный файл останется в файлах заявки.">
+                            Удалить
+                          </ConfirmSubmit>
+                        </ActionForm>
                       )}
+                      {can(user.role, "offers.manage") && o.status !== "ACCEPTED" && !o.fileId && (
+                        <details className="w-full rounded-lg border border-line p-3">
+                          <summary className="cursor-pointer text-sm">Изменить КП</summary>
+                          <div className="mt-3">
+                            <OfferBuilder
+                              leadId={lead.id}
+                              offer={{ id: o.id, items: o.items as unknown as { title: string; qty: number; unit: string; price: number }[], termDays: o.termDays, validDays: Math.max(1, Math.round((o.validUntil.getTime() - Date.now()) / 86400_000)), notes: o.notes }}
+                            />
+                          </div>
+                        </details>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {can(user.role, "offers.manage") && !["won", "lost"].includes(lead.status) && (
+                <>
+                <details className="mt-4 rounded-lg border border-line p-3">
+                  <summary className="cursor-pointer text-sm font-medium">Сформировать коммерческое предложение</summary>
+                  <div className="mt-3">
+                    <OfferBuilder leadId={lead.id} />
+                  </div>
+                </details>
+                <details className="mt-3 rounded-lg border border-line p-3">
+                  <summary className="cursor-pointer text-sm font-medium">Загрузить готовое КП (PDF / Word)</summary>
+                  <ActionForm action={uploadOfferAction} className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <input type="hidden" name="leadId" value={lead.id} />
+                    <UploadField name="file" label="Файл КП *" accept=".pdf,.docx,.doc,.xlsx" className="sm:col-span-2" />
+                    <NumField name="total" label="Сумма, ₽ *" defaultValue={lastOffer?.total} />
+                    <NumField name="termDays" label="Срок, раб. дн. *" defaultValue={lastOffer?.termDays ?? 15} />
+                    <NumField name="validDays" label="Действует, дн." defaultValue={10} />
+                    <div className="flex items-end">
+                      <SubmitButton size="sm" pendingText="Загружаем…">
+                        Загрузить КП
+                      </SubmitButton>
                     </div>
-                    {can(user.role, "offers.manage") && o.status !== "ACCEPTED" && (
-                      <details className="w-full rounded-lg border border-line p-3">
-                        <summary className="cursor-pointer text-sm">Изменить КП</summary>
-                        <div className="mt-3">
-                          <OfferBuilder
-                            leadId={lead.id}
-                            offer={{ id: o.id, items: o.items as unknown as { title: string; qty: number; unit: string; price: number }[], termDays: o.termDays, validDays: Math.max(1, Math.round((o.validUntil.getTime() - Date.now()) / 86400_000)), notes: o.notes }}
-                          />
-                        </div>
-                      </details>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {can(user.role, "offers.manage") && !["won", "lost"].includes(lead.status) && (
-              <details className="mt-4 rounded-lg border border-line p-3">
-                <summary className="cursor-pointer text-sm font-medium">Сформировать коммерческое предложение</summary>
-                <div className="mt-3">
-                  <OfferBuilder leadId={lead.id} />
-                </div>
-              </details>
+                  </ActionForm>
+                </details>
+              </>
             )}
           </Card>
 
@@ -194,10 +223,46 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                 <Link href={`/cabinet/contracts/${contract.id}`} className="font-medium text-accent-700 hover:underline">
                   Договор {contract.number} · {rub(contract.amount)} · {contract.termDays} раб. дн.
                 </Link>
-                <StatusBadge map={CONTRACT_STATUS} value={contract.status} />
+                <span className="flex items-center gap-2">
+                  <StatusBadge map={CONTRACT_STATUS} value={contract.status} />
+                  {can(user.role, "contracts.manage") && !lead.project && (contract.status !== "SIGNED" || user.role === "DIRECTOR") && (
+                    <ActionForm action={deleteContractAction}>
+                      <input type="hidden" name="contractId" value={contract.id} />
+                      <input type="hidden" name="leadId" value={lead.id} />
+                      <ConfirmSubmit title={`Удалить договор ${contract.number}?`} text="Договор и все его редакции будут удалены без возможности восстановления, заявка вернётся в «Коммерческое предложение». В журнале останется запись.">
+                        Удалить
+                      </ConfirmSubmit>
+                    </ActionForm>
+                  )}
+                </span>
               </div>
             ) : can(user.role, "contracts.manage") && !["won", "lost"].includes(lead.status) ? (
-              <ContractCreator leadId={lead.id} defaultAmount={lastOffer?.total ?? 100000} defaultTerm={lastOffer?.termDays ?? 20} />
+              <>
+                <ContractCreator leadId={lead.id} defaultAmount={lastOffer?.total ?? 100000} defaultTerm={lastOffer?.termDays ?? 20} />
+                <details className="mt-4 rounded-lg border border-line p-3">
+                  <summary className="cursor-pointer text-sm font-medium">Загрузить готовый договор (PDF / Word)</summary>
+                  <ActionForm action={uploadContractAction} className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <input type="hidden" name="leadId" value={lead.id} />
+                    <UploadField name="file" label="Файл договора *" accept=".pdf,.docx,.doc" className="sm:col-span-2" />
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">Номер договора</span>
+                      <input name="number" placeholder="Пусто — присвоится автоматически" className={fieldClass} />
+                      <FieldError name="number" />
+                    </label>
+                    <NumField name="amount" label="Сумма, ₽ *" defaultValue={lastOffer?.total} />
+                    <NumField name="termDays" label="Срок, раб. дн. *" defaultValue={lastOffer?.termDays ?? 20} />
+                    <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                      <input type="checkbox" name="signed" className="mt-0.5" />
+                      <span>Договор уже подписан (на бумаге или по ЭДО) — сразу создать проект. Иначе заказчик подпишет его в кабинете кодом из письма.</span>
+                    </label>
+                    <div className="sm:col-span-2">
+                      <SubmitButton size="sm" pendingText="Загружаем…">
+                        Загрузить договор
+                      </SubmitButton>
+                    </div>
+                  </ActionForm>
+                </details>
+              </>
             ) : (
               <p className="text-sm text-muted">Договор ещё не сформирован.</p>
             )}
@@ -222,7 +287,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           <Card title="Файлы">
             <FileList files={lead.files} canDelete={(f) => f.uploadedById === user.id} />
             <div className="mt-4">
-              <FileUploader target={{ leadId: lead.id }} categories={[{ value: "SOURCE", label: "Исходные данные" }, { value: "PHOTO", label: "Фотографии" }, { value: "DRAWING", label: "Чертежи" }, { value: "DOCUMENT", label: "Документы" }]} allowInternal={!isCustomer} />
+              <FileUploader target={{ leadId: lead.id }} categories={[{ value: "SOURCE", label: "Исходные данные" }, { value: "TZ", label: "Готовое ТЗ (файл)" }, { value: "PHOTO", label: "Фотографии" }, { value: "DRAWING", label: "Чертежи" }, { value: "DOCUMENT", label: "Документы" }]} allowInternal={!isCustomer} />
             </div>
           </Card>
 
@@ -371,5 +436,25 @@ function Field({ name, label, type = "text", defaultValue, className }: { name: 
       <input id={`lead-${name}`} name={name} type={type} defaultValue={defaultValue} className={fieldClass} />
       <FieldError name={name} />
     </div>
+  );
+}
+
+function UploadField({ name, label, accept, className }: { name: string; label: string; accept: string; className?: string }) {
+  return (
+    <label className={`text-sm ${className ?? ""}`}>
+      <span className="mb-1 block text-xs text-muted">{label}</span>
+      <input name={name} type="file" required accept={accept} className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:py-1.5 file:text-sm" />
+      <FieldError name={name} />
+    </label>
+  );
+}
+
+function NumField({ name, label, defaultValue }: { name: string; label: string; defaultValue?: number }) {
+  return (
+    <label className="text-sm">
+      <span className="mb-1 block text-xs text-muted">{label}</span>
+      <input name={name} type="number" min={1} defaultValue={defaultValue} className={fieldClass} />
+      <FieldError name={name} />
+    </label>
   );
 }

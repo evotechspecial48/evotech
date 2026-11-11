@@ -197,6 +197,76 @@ export async function setContractRevision(user: SessionUser, contractId: string,
   await audit({ actorId: user.id, action: "contract.revision", entityType: "Contract", entityId: contractId, meta: { isRevision } });
 }
 
+/**
+ * Готовый договор, оформленный отдельно (Word/PDF). Если он уже подписан — отмечается подписанным
+ * вне кабинета и сразу создаётся проект; иначе заказчик подписывает его в кабинете кодом из письма.
+ */
+export async function uploadLeadContract(user: SessionUser, leadId: string, file: File, input: { number: string; amount: number; termDays: number; signed: boolean }, ip: string | null) {
+  if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
+  if (!file.size) throw new UserError("Выберите файл договора", { file: "Выберите файл" });
+  if (!(input.amount > 0) || !(input.termDays > 0)) throw new UserError("Укажите сумму и срок", { amount: "Укажите сумму" });
+  const lead = await loadLeadAccess(user, leadId);
+  if (["won", "lost"].includes(lead.status)) throw new UserError("Заявка закрыта");
+  const open = await db.contract.findFirst({ where: { leadId, status: { in: ["AWAITING_SIGNATURE", "SIGNED"] } } });
+  if (open) throw new UserError(`По заявке уже есть договор ${open.number}. Удалите или аннулируйте его.`);
+  const email = lead.email;
+  if (!email) throw new UserError("Укажите почту заказчика в контактах заявки — она нужна для кабинета заказчика");
+  const number = input.number.trim() || (await nextNumber("Д"));
+  if (await db.contract.findUnique({ where: { number } })) throw new UserError(`Договор ${number} уже есть в системе`, { number: "Номер занят" });
+  let customerId = lead.customerId;
+  if (!customerId) {
+    const { user: customer } = await inviteUser(user, { email, name: lead.contactName, role: "CUSTOMER", phone: lead.phone ?? undefined });
+    customerId = customer.id;
+    await db.lead.update({ where: { id: leadId }, data: { customerId } });
+  }
+  const { saveUpload } = await import("./files");
+  const asset = await saveUpload(user, file, { leadId, category: "CONTRACT" }, ip);
+  const body = `^ ДОГОВОР № ${number}\n\nДоговор загружен файлом «${asset.originalName}». Текст договора — в приложенном файле.\n\nСумма: ${money(input.amount)} руб. Срок выполнения: ${input.termDays} рабочих дней.`;
+  const contract = await db.$transaction(async (tx) => {
+    const c = await tx.contract.create({
+      data: { number, status: "AWAITING_SIGNATURE", customerId: customerId!, amount: Math.round(input.amount), termDays: Math.round(input.termDays), leadId, fileId: asset.id, versions: { create: { version: 1, body, checksum: checksum(body), createdById: user.id } } },
+      include: { versions: true },
+    });
+    if (!input.signed && lead.status !== "awaiting_signature") {
+      await tx.lead.update({ where: { id: leadId }, data: { status: "awaiting_signature" } });
+      await tx.statusChange.create({ data: { entityType: "Lead", entityId: leadId, fromStatus: lead.status, toStatus: "awaiting_signature", actorId: user.id, comment: `Договор ${number} (файл)` } });
+    }
+    return c;
+  });
+  await audit({ actorId: user.id, action: "contract.create", entityType: "Contract", entityId: contract.id, meta: { number, amount: input.amount, uploaded: asset.originalName, signed: input.signed } });
+  if (input.signed) {
+    await markContractSigned(contract, contract.versions[0], { userId: user.id, method: "OFFLINE", via: "вне кабинета (загружен подписанный договор)" });
+    const { signedOutsideCabinet } = await import("./leads");
+    await signedOutsideCabinet(user, leadId);
+  } else {
+    await notify([customerId], "approval.pending", `Договор ${number} ожидает подписания`, `Сумма ${money(input.amount)} ₽, срок ${input.termDays} дн.`, `/cabinet/contracts/${contract.id}`);
+  }
+  return contract;
+}
+
+/**
+ * Удаление ошибочного договора. Нельзя, если по нему создан проект или прошла оплата;
+ * подписанный договор удаляет только директор. Заявка возвращается в «Коммерческое предложение».
+ */
+export async function deleteContract(user: SessionUser, contractId: string) {
+  if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
+  const contract = await db.contract.findUnique({ where: { id: contractId }, include: { payments: { where: { status: "paid" }, select: { id: true } } } });
+  if (!contract) throw new NotFoundError("Договор");
+  if (contract.projectId) throw new UserError("По договору создан проект — удалить его нельзя, аннулируйте договор");
+  if (contract.payments.length) throw new UserError("По договору есть оплата — удалить его нельзя");
+  if (contract.status === "SIGNED" && user.role !== "DIRECTOR") throw new ForbiddenError("Подписанный договор удаляет директор");
+  const lead = contract.leadId ? await db.lead.findUnique({ where: { id: contract.leadId }, select: { id: true, status: true } }) : null;
+  await db.$transaction(async (tx) => {
+    await tx.payment.deleteMany({ where: { contractId } });
+    await tx.contract.delete({ where: { id: contractId } });
+    if (lead && ["awaiting_signature", "contract_signed", "contract_approval"].includes(lead.status)) {
+      await tx.lead.update({ where: { id: lead.id }, data: { status: "commercial_offer" } });
+      await tx.statusChange.create({ data: { entityType: "Lead", entityId: lead.id, fromStatus: lead.status, toStatus: "commercial_offer", actorId: user.id, comment: `Договор ${contract.number} удалён` } });
+    }
+  });
+  await audit({ actorId: user.id, action: "contract.delete", entityType: "Contract", entityId: contractId, meta: { number: contract.number, amount: contract.amount, status: contract.status } });
+}
+
 export async function cancelContract(user: SessionUser, contractId: string) {
   if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
   const c = await db.contract.findUnique({ where: { id: contractId } });
@@ -256,7 +326,7 @@ export async function acceptContract(user: SessionUser, contractId: string, code
 export async function markContractSigned(
   contract: { id: string; number: string; quickOrderId: string | null; projectId: string | null; leadId: string | null },
   version: { id: string; version: number; checksum: string },
-  opts: { userId: string; method: "CHECKBOX_OTP" | "EXTERNAL_EDO"; ip?: string | null; userAgent?: string | null; via: string },
+  opts: { userId: string; method: "CHECKBOX_OTP" | "EXTERNAL_EDO" | "OFFLINE"; ip?: string | null; userAgent?: string | null; via: string },
 ) {
   const now = new Date();
   await db.$transaction(async (tx) => {

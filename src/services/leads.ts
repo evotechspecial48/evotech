@@ -94,6 +94,22 @@ export async function changeLeadStatus(user: SessionUser, leadId: string, to: Le
   ]);
   await audit({ actorId: user.id, action: "lead.status", entityType: "Lead", entityId: leadId, meta: { from: lead.status, to } });
   await notify([lead.customerId], "status.changed", `Статус заявки №${lead.number}: ${LEAD_STATUS[to].label}`, undefined, `/cabinet/leads/${leadId}`, { email: false });
+  if (to === "contract_signed") await signedOutsideCabinet(user, leadId);
+}
+
+/**
+ * «Договор подписан» вручную (на бумаге, по ЭДО вне сайта): договор по заявке отмечается подписанным
+ * и сразу создаётся проект, чтобы он появился в разделе «Проекты». Руководитель — единственный активный РП, если он один.
+ */
+export async function signedOutsideCabinet(user: SessionUser, leadId: string) {
+  const { markContractSigned } = await import("./contracts");
+  const { convertLeadToProject } = await import("./projects");
+  const contract = await db.contract.findFirst({ where: { leadId, status: { in: ["AWAITING_SIGNATURE", "SIGNED"] } }, orderBy: { createdAt: "desc" }, include: { versions: { orderBy: { version: "desc" }, take: 1 } } });
+  if (!contract) return; // договора в системе нет — проект создаётся после формирования договора
+  if (contract.status === "AWAITING_SIGNATURE") await markContractSigned(contract, contract.versions[0], { userId: user.id, method: "OFFLINE", via: "вне кабинета (отмечено вручную)" });
+  if (await db.project.findUnique({ where: { leadId }, select: { id: true } })) return;
+  const pms = await db.user.findMany({ where: { role: "PROJECT_MANAGER", status: "ACTIVE" }, select: { id: true }, take: 2 });
+  await convertLeadToProject(user, leadId, pms.length === 1 ? pms[0].id : null);
 }
 
 export async function assignLeadManager(user: SessionUser, leadId: string, managerId: string) {
@@ -225,6 +241,47 @@ export async function updateOffer(user: SessionUser, offerId: string, items: Off
     data: { items: clean as unknown as Prisma.InputJsonValue, total, termDays, validUntil: new Date(Date.now() + validDays * 86400_000), notes: notes || null, version: offer.version + 1 },
   });
   await audit({ actorId: user.id, action: "offer.update", entityType: "CommercialOffer", entityId: offerId, meta: { total, version: offer.version + 1 } });
+}
+
+/** Готовое КП, оформленное отдельно: файл (PDF/Word) + сумма и сроки для учёта. */
+export async function uploadOffer(user: SessionUser, leadId: string, file: File, total: number, termDays: number, validDays: number, ip: string | null) {
+  if (!can(user.role, "offers.manage")) throw new ForbiddenError();
+  const lead = await loadLeadAccess(user, leadId);
+  if (!file.size) throw new UserError("Выберите файл КП", { file: "Выберите файл" });
+  if (!(total > 0)) throw new UserError("Укажите сумму КП", { total: "Укажите сумму" });
+  if (termDays < 1) throw new UserError("Укажите срок выполнения", { termDays: "Укажите срок" });
+  const { saveUpload } = await import("./files");
+  const asset = await saveUpload(user, file, { leadId, category: "DOCUMENT" }, ip);
+  const prevCount = await db.commercialOffer.count({ where: { leadId } });
+  const offer = await db.commercialOffer.create({
+    data: {
+      leadId,
+      version: prevCount + 1,
+      items: [{ title: `По файлу «${asset.originalName}»`, qty: 1, unit: "компл.", price: Math.round(total) }] as unknown as Prisma.InputJsonValue,
+      total: Math.round(total),
+      termDays,
+      validUntil: new Date(Date.now() + validDays * 86400_000),
+      notes: "КП загружено файлом",
+      fileId: asset.id,
+      createdById: user.id,
+    },
+  });
+  if (["new", "tz_preparation"].includes(lead.status)) {
+    await db.lead.update({ where: { id: leadId }, data: { status: "commercial_offer" } });
+    await db.statusChange.create({ data: { entityType: "Lead", entityId: leadId, fromStatus: lead.status, toStatus: "commercial_offer", actorId: user.id, comment: `КП №${offer.number} (файл)` } });
+  }
+  await audit({ actorId: user.id, action: "offer.create", entityType: "CommercialOffer", entityId: offer.id, meta: { total, uploaded: asset.originalName } });
+  return offer;
+}
+
+/** Удаление ошибочного или неактуального КП. Файл загруженного КП остаётся в файлах заявки. */
+export async function deleteOffer(user: SessionUser, offerId: string) {
+  if (!can(user.role, "offers.manage")) throw new ForbiddenError();
+  const offer = await db.commercialOffer.findUnique({ where: { id: offerId } });
+  if (!offer) throw new NotFoundError("Коммерческое предложение");
+  await loadLeadAccess(user, offer.leadId);
+  await db.commercialOffer.delete({ where: { id: offerId } });
+  await audit({ actorId: user.id, action: "offer.delete", entityType: "CommercialOffer", entityId: offerId, meta: { number: offer.number, total: offer.total, status: offer.status } });
 }
 
 export async function setOfferStatus(user: SessionUser, offerId: string, status: "SENT" | "ACCEPTED" | "REJECTED") {

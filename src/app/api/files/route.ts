@@ -7,7 +7,7 @@ import { UserError } from "@/lib/errors";
 import { ForbiddenError } from "@/domain/rbac";
 import { saveUpload } from "@/services/files";
 
-const CATEGORIES: FileCategory[] = ["SOURCE", "PHOTO", "SKETCH", "MODEL", "DRAWING", "SPECIFICATION", "DOCUMENT", "CONTRACT", "OTHER"];
+const CATEGORIES: FileCategory[] = ["SOURCE", "PHOTO", "SKETCH", "MODEL", "DRAWING", "SPECIFICATION", "DOCUMENT", "CONTRACT", "TZ", "OTHER"];
 const STAGES: StageCode[] = ["brief", "sketch", "model", "drawings", "documentation", "delivery"];
 
 /** Загрузка файлов (multipart). Проверка: сессия, Origin (CSRF), права на объект, формат, размер, антивирус. */

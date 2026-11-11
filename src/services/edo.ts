@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger";
 import { NotFoundError, UserError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth";
 import { textToPdf } from "@/lib/pdf";
+import { storage } from "@/lib/storage";
 import { SBIS_FAILED, SBIS_SIGNED, sbis, type SbisParty } from "@/lib/edo/sbis";
 import { can, ForbiddenError } from "@/domain/rbac";
 import { companyRequisites, markContractSigned } from "./contracts";
@@ -40,13 +41,17 @@ export async function sendContractToSbis(user: SessionUser, contractId: string, 
 
   const r = await companyRequisites();
   const version = contract.versions[0];
-  const pdf = await textToPdf(`Договор ${contract.number}`, version.body);
+  // Загруженный готовый договор отправляется как есть, иначе — PDF актуальной редакции
+  const uploaded = contract.fileId ? await db.fileAsset.findUnique({ where: { id: contract.fileId } }) : null;
+  const file = uploaded
+    ? { name: uploaded.originalName, data: await storage().get(uploaded.storageKey) }
+    : { name: `Договор_${contract.number}.pdf`, data: await textToPdf(`Договор ${contract.number}`, version.body) };
   const res = await client.createContract({
     number: contract.number,
     date: contract.createdAt,
     amount: contract.amount,
     note: `Договор подряда № ${contract.number}, редакция ${version.version}. Сформирован на evotechnology.su`,
-    file: { name: `Договор_${contract.number}.pdf`, data: pdf },
+    file,
     our: { inn: r.inn, name: r.shortName ?? r.name, fio: fioFrom(r.name ?? r.shortName ?? "") },
     counterparty: { inn, kpp: kpp || null, name: companyName, fio: inn.length === 12 ? fioFrom(companyName) ?? fioFrom(customer.name) : null },
   });
