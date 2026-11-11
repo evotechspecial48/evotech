@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { can } from "@/domain/rbac";
 import { CONTRACT_STATUS } from "@/domain/labels";
-import { contractCancelAction, contractReviseAction, sendSbisAction } from "@/app/actions/cabinet";
+import { contractCancelAction, contractReviseAction, contractRevisionAction, sendSbisAction } from "@/app/actions/cabinet";
 import { sbis } from "@/lib/edo/sbis";
 import { ContractSign } from "@/components/cabinet/contract-sign";
 import { ContractPayments } from "@/components/cabinet/contract-payments";
@@ -122,6 +122,20 @@ export default async function ContractPage({ params, searchParams }: { params: P
               ]}
             />
           </Card>
+          {can(user.role, "contracts.manage") && !contract.quickOrder && (
+            <Card title="Учёт">
+              <ActionForm action={contractRevisionAction} className="space-y-2">
+                <input type="hidden" name="contractId" value={contract.id} />
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" name="isRevision" defaultChecked={contract.isRevision} className="mt-0.5" />
+                  <span>Редакция ранее выполненного проекта — не входит в бонус менеджера (3%)</span>
+                </label>
+                <SubmitButton size="sm" variant="secondary">
+                  Сохранить
+                </SubmitButton>
+              </ActionForm>
+            </Card>
+          )}
           <Card title="Редакции и подписания">
             <ul className="space-y-2 text-sm">
               {contract.versions.map((ver) => {

@@ -27,7 +27,9 @@ describe("RBAC", () => {
     expect(designerMenu).not.toContain("/cabinet/leads");
     expect(designerMenu).not.toContain("/cabinet/users");
     expect(navFor("DIRECTOR").length).toBeGreaterThan(designerMenu.length);
-    for (const r of ROLES) expect(navFor(r).some((i) => i.href === "/cabinet")).toBe(true);
+    // «Аналитика» (стартовая страница) — у всех ролей, отдельного пункта дашборда нет
+    for (const r of ROLES) expect(navFor(r).filter((i) => i.href === "/cabinet").map((i) => i.label)).toEqual(["Аналитика"]);
+    for (const r of ROLES) expect(navFor(r).some((i) => i.href === "/cabinet/analytics")).toBe(false);
   });
 });
 

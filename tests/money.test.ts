@@ -64,3 +64,13 @@ describe("ЭДО СБИС: стороны документа", () => {
     expect(sbisParty({ inn: "481303880005", name: "ИП", fio: fioFrom("ИП Левонидских Евгений Олегович") })).toEqual({ СвФЛ: { ИНН: "481303880005", Фамилия: "Левонидских", Имя: "Евгений", Отчество: "Олегович" } });
   });
 });
+
+describe("финансы директора", () => {
+  it("ноябрь из таблицы учёта: руководитель 10% (не менее 50 000), менеджер 30 000 + 3%, налог 8%, прибыль", async () => {
+    const { computeFinance } = await import("@/domain/finance");
+    const r = computeFinance({ revenue: 635000, designers: 330000, managerBases: [635000], sro: 0, ads: 5000, adsPlatforms: 45000, other: 37985 });
+    expect([r.pm, r.managers, r.tax, r.profit]).toEqual([63500, 49050, 50800, 53665]);
+    // Мало выручки — руководитель получает минимум 50 000; редакции не входят в базу менеджера
+    expect(computeFinance({ revenue: 100000, designers: 0, managerBases: [0], sro: 0, ads: 0, adsPlatforms: 0, other: 0 })).toMatchObject({ pm: 50000, managers: 30000, tax: 8000 });
+  });
+});

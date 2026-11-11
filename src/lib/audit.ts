@@ -82,6 +82,8 @@ export const AUDIT_LABELS: Record<string, string> = {
   "payment.webhook": "Уведомление банка",
   "payment.status": "Изменение статуса платежа",
   "payment.manual": "Оплата отмечена вручную",
+  "finance.update": "Расходы месяца",
+  "contract.revision": "Отметка «редакция» в договоре",
   "quick_order.create": "Быстрый заказ",
   "quick_order.select": "Выбор варианта",
   "ai.retry": "Повторный запуск AI-задачи",

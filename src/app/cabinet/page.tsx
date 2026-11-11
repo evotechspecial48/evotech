@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AnalyticsView } from "@/components/cabinet/analytics-view";
 import { requireUser, type SessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { LEAD_STATUS, QUICK_ORDER_STATUS, STAGE_STATUS } from "@/domain/labels";
@@ -9,12 +10,15 @@ import { getAnalytics } from "@/services/analytics";
 import { TimerSummary } from "@/components/cabinet/timer-card";
 import { Alert, Card, EmptyState, fmtDate, LinkButton, PageHeader, Progress, Stat, StatusBadge } from "@/components/ui";
 
-export default async function Dashboard({ searchParams }: { searchParams: Promise<{ welcome?: string; forbidden?: string }> }) {
+/** Стартовая страница кабинета — «Аналитика»: содержимое зависит от роли. */
+export default async function AnalyticsHome({ searchParams }: { searchParams: Promise<{ welcome?: string; forbidden?: string; period?: string; fm?: string }> }) {
   const user = await requireUser();
   const sp = await searchParams;
+  if (user.role === "DIRECTOR") return <AnalyticsView user={user} sp={sp} />;
+  if (user.role === "PROJECT_MANAGER") return <AnalyticsView user={user} sp={sp} intro={<ManagerDash user={user} />} />;
   return (
     <>
-      <PageHeader title={`Здравствуйте, ${user.name.split(" ")[0]}!`} subtitle={ROLE_LABELS[user.role]} />
+      <PageHeader title="Аналитика" subtitle={`Здравствуйте, ${user.name.split(" ")[0]}! · ${ROLE_LABELS[user.role]}`} />
       {sp.forbidden && (
         <div className="mb-5">
           <Alert tone="warning">Раздел недоступен для вашей роли.</Alert>
@@ -27,7 +31,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </Alert>
         </div>
       )}
-      {user.role === "CUSTOMER" ? <CustomerDash user={user} /> : user.role === "SALES_MANAGER" ? <SalesDash user={user} /> : user.role === "DESIGNER" ? <DesignerDash user={user} /> : <ManagerDash user={user} />}
+      {user.role === "CUSTOMER" ? <CustomerDash user={user} /> : user.role === "SALES_MANAGER" ? <SalesDash user={user} /> : <DesignerDash user={user} />}
     </>
   );
 }

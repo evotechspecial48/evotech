@@ -122,7 +122,8 @@ export function assertCan(role: RoleCode, permission: Permission): void {
 export type NavItem = { href: string; label: string; permission: Permission[] };
 
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/cabinet", label: "Дашборд", permission: [] },
+  // Стартовая страница кабинета: дашборд и аналитика объединены, содержимое зависит от роли
+  { href: "/cabinet", label: "Аналитика", permission: [] },
   { href: "/cabinet/leads", label: "Заявки", permission: ["leads.view_all", "leads.view_own"] },
   { href: "/cabinet/projects", label: "Проекты", permission: ["projects.view_all", "projects.view_assigned", "projects.view_own"] },
   { href: "/cabinet/quick-orders", label: "Быстрые заказы", permission: ["quick_orders.create", "quick_orders.view_all"] },
@@ -135,7 +136,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/cabinet/payments", label: "Платежи", permission: ["payments.view_all", "payments.pay"] },
   { href: "/cabinet/notifications", label: "Уведомления", permission: [] },
   { href: "/cabinet/users", label: "Пользователи", permission: ["users.manage"] },
-  { href: "/cabinet/analytics", label: "Аналитика", permission: ["analytics.view"] },
   { href: "/cabinet/audit", label: "Журнал действий", permission: ["audit.view"] },
   { href: "/cabinet/settings", label: "Настройки", permission: ["settings.manage"] },
 ];

@@ -12,6 +12,8 @@ import { requestPasswordReset, resetPassword, updateUser } from "@/services/user
 import { cancelInvoice, issueContractPayment, markPaidManually } from "@/services/invoices";
 import { sendContractToSbis, syncSbisContracts } from "@/services/edo";
 import { MockSbisClient, setSbisClient } from "@/lib/edo/sbis";
+import { getFinance, saveFinanceMonth } from "@/services/finance";
+import { monthRange } from "@/domain/months";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
 import { saveGenerated } from "@/services/files";
@@ -366,6 +368,17 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     } finally {
       setSbisClient(null);
     }
+  });
+
+  it("финансы: выручка по подписанным договорам месяца, оплата проектировщиков, ручные расходы — только директор", async () => {
+    const before = (await getFinance(1))[0];
+    await expect(saveFinanceMonth(pm, before.month, { sro: 1, ads: 0, adsPlatforms: 0, other: 0 })).rejects.toBeInstanceOf(ForbiddenError);
+    await saveFinanceMonth(director, before.month, { sro: 43850, ads: 2700, adsPlatforms: 40000, other: 13266 });
+    const row = (await getFinance(1))[0];
+    expect([row.sro, row.ads, row.adsPlatforms, row.other]).toEqual([43850, 2700, 40000, 13266]);
+    const signed = await db.contract.aggregate({ where: { status: "SIGNED", signedAt: { gte: monthRange(row.month).from } }, _sum: { amount: true } });
+    expect(row.revenue).toBe(signed._sum.amount ?? 0);
+    expect(row.profit).toBe(row.revenue - row.designers - row.pm - row.managers - row.tax - 43850 - 2700 - 40000 - 13266);
   });
 
   it("журнал фиксирует критичные действия", async () => {

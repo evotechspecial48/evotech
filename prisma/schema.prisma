@@ -608,6 +608,8 @@ model Contract {
   sbisStateName  String?
   sbisLink       String?
   sbisSentAt     DateTime?
+  // Редакция ранее выполненного проекта — не входит в бонус менеджера (3%)
+  isRevision     Boolean        @default(false)
   createdAt      DateTime       @default(now())
   versions       ContractVersion[]
   acceptances    ContractAcceptance[]
@@ -866,4 +868,15 @@ model Setting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+/** Ручные расходы месяца для финансовой аналитики директора (СРО, реклама, прочее), ₽. */
+model FinanceMonth {
+  month        String   @id // ГГГГ-ММ
+  sro          Int      @default(0)
+  ads          Int      @default(0)
+  adsPlatforms Int      @default(0)
+  other        Int      @default(0)
+  updatedById  String?
+  updatedAt    DateTime @updatedAt
 }

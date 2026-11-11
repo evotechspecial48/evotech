@@ -188,6 +188,15 @@ export async function reviseContract(user: SessionUser, contractId: string, body
   await notify([contract.customerId], "approval.pending", `Договор ${contract.number} обновлён (версия ${version})`, "Ознакомьтесь с актуальной редакцией и подтвердите её.", `/cabinet/contracts/${contractId}`);
 }
 
+/** Отметка «Редакция ранее выполненного проекта» — договор не входит в бонус менеджера. */
+export async function setContractRevision(user: SessionUser, contractId: string, isRevision: boolean) {
+  if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
+  const contract = await db.contract.findUnique({ where: { id: contractId }, select: { id: true } });
+  if (!contract) throw new NotFoundError("Договор");
+  await db.contract.update({ where: { id: contractId }, data: { isRevision } });
+  await audit({ actorId: user.id, action: "contract.revision", entityType: "Contract", entityId: contractId, meta: { isRevision } });
+}
+
 export async function cancelContract(user: SessionUser, contractId: string) {
   if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
   const c = await db.contract.findUnique({ where: { id: contractId } });

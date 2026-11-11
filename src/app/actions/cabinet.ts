@@ -23,6 +23,7 @@ import * as contracts from "@/services/contracts";
 import * as customers from "@/services/customers";
 import * as invoices from "@/services/invoices";
 import * as edo from "@/services/edo";
+import * as finance from "@/services/finance";
 import * as payments from "@/services/payments";
 import * as quick from "@/services/quick-orders";
 import * as aiJobs from "@/services/ai-jobs";
@@ -439,6 +440,22 @@ export async function sendSbisAction(_: ActionState, fd: FormData): Promise<Acti
     const user = await actor("contracts.manage");
     await edo.sendContractToSbis(user, str(fd, "contractId"), { inn: str(fd, "inn", 20), kpp: str(fd, "kpp", 20) });
     return { ok: true, message: "Договор загружен в СБИС — подпишите и отправьте его в Saby" };
+  });
+}
+
+export async function contractRevisionAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("contracts.manage");
+    await contracts.setContractRevision(user, str(fd, "contractId"), fd.get("isRevision") === "on");
+    return { ok: true, message: "Сохранено" };
+  });
+}
+
+export async function saveFinanceAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("analytics.view");
+    await finance.saveFinanceMonth(user, str(fd, "month"), { sro: num(fd, "sro") ?? 0, ads: num(fd, "ads") ?? 0, adsPlatforms: num(fd, "adsPlatforms") ?? 0, other: num(fd, "other") ?? 0 });
+    return { ok: true, message: "Расходы месяца сохранены" };
   });
 }
 
