@@ -32,7 +32,7 @@ export async function ContractPayments({ user, contract, payments }: { user: Ses
         Оплачено {rub(paid)} из {rub(contract.amount)}
         {paid >= contract.amount && contract.amount > 0 && <span className="ml-2 font-medium text-success-700">✓ договор оплачен полностью</span>}
       </p>
-      {shown.length === 0 && <p className="text-sm text-muted">{staff ? "Счетов пока нет." : "Счёт ещё не выставлен — менеджер выставит его после подписания договора."}</p>}
+      {shown.length === 0 && <p className="text-sm text-muted">{staff ? "Счетов пока нет." : "Счёт ещё не выставлен — менеджер выставит его по вашей просьбе."}</p>}
       <ul className="space-y-4">
         {shown.map((p) => (
           <li key={p.id} className="rounded-lg border border-line p-3">

@@ -1,7 +1,8 @@
 // Импорт закрытых проектов из таблицы учёта (вкладки «Март 2026», «Август 2026», «Сентябрь 2026» → CSV):
 //   data/import/closed/ГГГГ-ММ.csv — имя файла задаёт месяц договора.
 // Проекты создаются сразу завершёнными: договор подписан (на бумаге) 1-го числа месяца, все этапы выполнены,
-// проектировщику — оплата и аванс из таблицы. Берутся только строки с заказчиком и стоимостью, остальное пропускается.
+// проектировщику — оплата и аванс из таблицы. Берутся строки со стоимостью или с оплатой проектировщику
+// (без стоимости — доп. работы, проект без договора); прочие колонки, кроме нужных, игнорируются.
 // Повторный запуск безопасен: строка таблицы (вкладка + номер строки) импортируется один раз. Письма клиентам не отправляются.
 // Доп. работы по тому же договору (номер повторяется) — отдельный проект, к номеру добавляется «/ ГГГГ-ММ-строка».
 // Запуск: npx tsx scripts/import-closed.ts [--dry]
@@ -31,26 +32,46 @@ interface Row {
   executor: string;
 }
 
+/**
+ * Месячный лист: 1-я строка — название, 2-я — итоги, 3-я — заголовок, дальше — проекты.
+ * Раскладка колонок в листах разных месяцев отличается, поэтому колонка «Стоимость» берётся
+ * по первой сумме в строке итогов, за ней — «Зарплата», «Аванс», «Исполнитель»; срок — за две колонки до неё.
+ * В ранних листах нет «№ договора»: тогда «Краткое ТЗ» стоит во второй колонке.
+ */
 function readMonth(file: string): Row[] {
-  const month = file.replace(/\.csv$/, "");
-  // Заголовок — третья строка: ФИО | № Договора | ТЗ | Оценка | Телефон | Почта | Срок | Дата сдачи | Стоимость | Зарплата | Аванс | Исполнитель
-  return parseCsv(readFileSync(`${DIR}/${file}`, "utf8"))
+  const month = file.replace(/.csv$/, "");
+  const rows = parseCsv(readFileSync(`${DIR}/${file}`, "utf8"));
+  const totals = rows[1] ?? [];
+  const amountCol = totals.findIndex((v) => (money(v) ?? 0) > 0);
+  if (amountCol < 0) return [];
+  const header = rows[2] ?? [];
+  const noNumber = /ТЗ/i.test(header[1] ?? "");
+  return rows
     .slice(3)
     .map((r, i) => ({
       month,
       row: i + 4,
-      client: r[0] ?? "",
-      number: r[1] ?? "",
-      scope: r[2] ?? "",
-      amount: money(r[8] ?? "") ?? 0,
+      client: r[0] || "Заказчик не указан",
+      number: noNumber ? "" : (r[1] ?? ""),
+      scope: (noNumber ? r[1] : r[2]) ?? "",
+      amount: money(r[amountCol] ?? "") ?? 0,
       phone: r[4] ?? "",
-      email: r[5] ?? "",
-      days: Number(r[6]) || 10,
-      fee: money(r[9] ?? ""),
-      advance: money(r[10] ?? ""),
-      executor: r[11] ?? "",
+      email: r.slice(4, amountCol - 2).find((v) => /@/.test(v)) ?? "",
+      days: Number(r[amountCol - 2]) || 10,
+      fee: money(r[amountCol + 1] ?? ""),
+      advance: money(r[amountCol + 2] ?? ""),
+      executor: r[amountCol + 3] ?? "",
     }))
-    .filter((r) => r.client && r.amount > 0);
+    // Строки без стоимости, но с оплатой проектировщику — доп. работы по проекту (выручка — в другой строке)
+    // Строки без заказчика с копеечной суммой и без оплаты — справочные (расценки ₽/т под таблицей), не проекты
+    .filter((r) => (r.amount > 0 || (r.fee ?? 0) > 0) && !(r.client === "Заказчик не указан" && r.amount < 1000 && !r.fee));
+}
+
+/** Итоги листа (2-я строка): стоимость и зарплата — для сверки импорта. */
+function monthTotals(file: string): { amount: number; fee: number } {
+  const totals = parseCsv(readFileSync(`${DIR}/${file}`, "utf8"))[1] ?? [];
+  const col = totals.findIndex((v) => (money(v) ?? 0) > 0);
+  return { amount: money(totals[col] ?? "") ?? 0, fee: money(totals[col + 1] ?? "") ?? 0 };
 }
 
 async function main() {
@@ -59,6 +80,16 @@ async function main() {
   if (dry) {
     console.table(rows.map((r) => ({ месяц: r.month, строка: r.row, заказчик: r.client.slice(0, 30), договор: contractNumber(r.number || `б/н ${r.month}-${r.row}`, r.client).slice(0, 24), сумма: r.amount, оплата: r.fee, исполнитель: r.executor })));
     console.log(`Строк к импорту: ${rows.length}`);
+    // Сверка с итогами листов: расхождение — строки без заказчика или суммы, которые пропускаются
+    console.table(
+      files.map((f) => {
+        const t = monthTotals(f);
+        const got = rows.filter((r) => r.month === f.replace(/.csv$/, ""));
+        const amount = got.reduce((s, r) => s + r.amount, 0);
+        const fee = got.reduce((s, r) => s + (r.fee ?? 0), 0);
+        return { месяц: f.replace(/.csv$/, ""), строк: got.length, сумма: amount, итог_листа: t.amount, оплата: fee, итог_оплаты: t.fee, совпадает: amount === t.amount && fee === t.fee ? "да" : "НЕТ" };
+      }),
+    );
     return;
   }
   const [pm, sales] = await Promise.all([
@@ -114,11 +145,14 @@ async function main() {
       await tx.projectStage.updateMany({ where: { projectId: p.id }, data: { status: "completed", startedAt: signedAt, completedAt } });
       await tx.timer.updateMany({ where: { projectId: p.id }, data: { completedAt, state: "completed" } });
       await tx.statusChange.create({ data: { entityType: "Project", entityId: p.id, projectId: p.id, fromStatus: "ACTIVE", toStatus: "COMPLETED", comment: "Архивный проект из таблицы учёта", createdAt: completedAt } });
-      const c = await tx.contract.create({
-        data: { number, status: "SIGNED", signedAt, customerId: cust.id, amount: r.amount, termDays: r.days, leadId: lead.id, projectId: p.id, isRevision: /редакц/i.test(r.scope), versions: { create: { version: 1, body, checksum: checksum(body) } } },
-        include: { versions: true },
-      });
-      await tx.contractAcceptance.create({ data: { contractId: c.id, versionId: c.versions[0].id, userId: cust.id, method: "OFFLINE", checksum: c.versions[0].checksum, acceptedAt: signedAt } });
+      // Доп. работы без своей стоимости: проект без договора — в выручку не входит, оплата проектировщику учитывается
+      if (r.amount > 0) {
+        const c = await tx.contract.create({
+          data: { number, status: "SIGNED", signedAt, customerId: cust.id, amount: r.amount, termDays: r.days, leadId: lead.id, projectId: p.id, isRevision: /редакц/i.test(r.scope), versions: { create: { version: 1, body, checksum: checksum(body) } } },
+          include: { versions: true },
+        });
+        await tx.contractAcceptance.create({ data: { contractId: c.id, versionId: c.versions[0].id, userId: cust.id, method: "OFFLINE", checksum: c.versions[0].checksum, acceptedAt: signedAt } });
+      }
       for (const userId of designerIds) await tx.projectMember.create({ data: { projectId: p.id, userId, fee: share(r.fee), advance: share(r.advance) } });
       await tx.auditEvent.create({ data: { action: "project.create", entityType: "Project", entityId: p.id, projectId: p.id, meta: { import: "sheet-closed", month: r.month, row: r.row } } });
     });

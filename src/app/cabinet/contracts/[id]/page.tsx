@@ -73,7 +73,8 @@ export default async function ContractPage({ params, searchParams }: { params: P
               {signers[accepted.userId]} · {fmtDateTime(accepted.acceptedAt)} {accepted.ip ? ` · IP ${accepted.ip}` : ""} · редакция {accepted.version.version} · способ: {accepted.method === "EXTERNAL_EDO" ? "КЭП в ЭДО СБИС" : accepted.method === "OFFLINE" ? "на бумаге / вне кабинета (отмечено сотрудником)" : "простая ЭП (код из письма)"}
             </Alert>
           )}
-          {(contract.status === "SIGNED" || contract.payments.length > 0) && <ContractPayments user={user} contract={contract} payments={contract.payments} />}
+          {/* Счёт можно выставить сразу при формировании договора — заказчики часто платят до подписания или во время */}
+          {(contract.status === "SIGNED" || contract.status === "AWAITING_SIGNATURE" || contract.payments.length > 0) && <ContractPayments user={user} contract={contract} payments={contract.payments} />}
           {can(user.role, "contracts.manage") && !contract.quickOrder && (contract.status === "AWAITING_SIGNATURE" || contract.sbisDocumentId) && (
             <Card title="Подписание через ЭДО СБИС">
               {contract.sbisDocumentId ? (

@@ -419,6 +419,14 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     expect(salesSalary.amount).toBeGreaterThanOrEqual(30000 + Math.round(120000 * 0.03));
   });
 
+  it("счёт выставляется сразу при формировании договора — до подписания", async () => {
+    const lead = await createLead({ title: "Счёт до подписания", contactName: "Зайцев", email: "zaitsev@t.ru", source: "phone" }, sales, null);
+    const contract = await createLeadContract(sales, lead.id, 80000, 10);
+    expect(contract.status).toBe("AWAITING_SIGNATURE");
+    const p = await issueContractPayment(sales, { contractId: contract.id, kind: "prepay", method: "invoice" });
+    expect((await db.payment.findUniqueOrThrow({ where: { id: p.id } })).amount).toBe(40000 * 100);
+  });
+
   it("журнал фиксирует критичные действия", async () => {
     const actions = new Set((await db.auditEvent.findMany({ select: { action: true } })).map((a) => a.action));
     for (const a of ["lead.create", "contract.accept", "lead.convert", "timer.pause", "timer.resume", "stage.transition", "payment.webhook", "payment.status", "customer.create", "project.complete"]) {
