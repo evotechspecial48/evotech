@@ -6,14 +6,32 @@ import { ForbiddenError } from "@/domain/rbac";
 import { computeFinance, type FinanceRow } from "@/domain/finance";
 import { isMonthKey, lastMonths, monthKey, monthRange, projectMonthDate } from "@/domain/months";
 
-export type FinanceMonthRow = FinanceRow & { month: string };
+/** fact — месяц взят из таблицы учёта (лист «Проекты»), а не рассчитан. */
+export type FinanceMonthRow = FinanceRow & { month: string; fact: boolean };
 
 /**
  * Финансы по месяцам для директора: выручка — подписанные договоры (по дате подписания),
  * проектировщики — оплата исполнителей по проектам месяца, ручные расходы — FinanceMonth.
  */
 export async function getFinance(count = 6, now = new Date()): Promise<FinanceMonthRow[]> {
-  const keys = lastMonths(count, now).reverse();
+  return financeFor(lastMonths(count, now).reverse());
+}
+
+/** Первый месяц учёта в таблице компании. */
+export const FINANCE_START = "2021-06";
+
+/** Все месяцы с начала учёта до текущего. */
+export function allFinanceMonths(now = new Date()): string[] {
+  const keys: string[] = [];
+  for (let m = FINANCE_START; m <= monthKey(now); ) {
+    keys.push(m);
+    const [y, mm] = m.split("-").map(Number);
+    m = mm === 12 ? `${y + 1}-01` : `${y}-${String(mm + 1).padStart(2, "0")}`;
+  }
+  return keys;
+}
+
+export async function financeFor(keys: string[]): Promise<FinanceMonthRow[]> {
   const from = monthRange(keys[0]).from;
   const [contracts, projects, salesManagers, manual] = await Promise.all([
     db.contract.findMany({
@@ -49,9 +67,7 @@ export async function getFinance(count = 6, now = new Date()): Promise<FinanceMo
   return keys.map((month) => {
     const per = managerBase.get(month);
     const x = manualBy.get(month);
-    return {
-      month,
-      ...computeFinance({
+    const row = computeFinance({
         revenue: revenue.get(month) ?? 0,
         designers: designers.get(month) ?? 0,
         managerBases: salesManagers.map((u) => per?.get(u.id) ?? 0),
@@ -59,9 +75,29 @@ export async function getFinance(count = 6, now = new Date()): Promise<FinanceMo
         ads: x?.ads ?? 0,
         adsPlatforms: x?.adsPlatforms ?? 0,
         other: x?.other ?? 0,
-      }),
-    };
+      });
+    // Факт из таблицы учёта заменяет расчёт; прибыль пересчитывается
+    const fact = x?.revenue != null;
+    if (!fact) return { month, fact, ...row };
+    const f = { revenue: x.revenue ?? 0, designers: x.designers ?? 0, pm: x.pm ?? 0, managers: x.managers ?? 0, tax: x.tax ?? 0 };
+    return { month, fact, ...row, ...f, profit: f.revenue - f.designers - f.pm - f.managers - f.tax - row.sro - row.ads - row.adsPlatforms - row.other };
   });
+}
+
+/** Финансовые годы компании (июнь–май), как в таблице учёта: сумма месяцев. */
+export function financeByYears(rows: FinanceMonthRow[]): (FinanceMonthRow & { label: string })[] {
+  const by = new Map<string, FinanceMonthRow & { label: string }>();
+  const keys = ["revenue", "designers", "pm", "managers", "tax", "sro", "ads", "adsPlatforms", "other", "profit"] as const;
+  for (const r of rows) {
+    const [y, m] = r.month.split("-").map(Number);
+    const start = m >= 6 ? y : y - 1;
+    const id = String(start);
+    const acc = by.get(id) ?? { month: id, label: `${start}–${String(start + 1).slice(2)}`, fact: true, revenue: 0, designers: 0, pm: 0, managers: 0, tax: 0, sro: 0, ads: 0, adsPlatforms: 0, other: 0, profit: 0, managerBases: [] };
+    for (const k of keys) acc[k] += r[k];
+    acc.fact &&= r.fact;
+    by.set(id, acc);
+  }
+  return [...by.values()];
 }
 
 export interface SalaryMonth {

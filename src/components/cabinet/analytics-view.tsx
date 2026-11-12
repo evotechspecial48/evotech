@@ -8,7 +8,7 @@ import { getAnalytics, getMonthlyStats, type MonthRow } from "@/services/analyti
 import { monthLabel } from "@/domain/months";
 import { Alert, Card, PageHeader, rub, Stat, Table } from "@/components/ui";
 import { FinanceTable } from "@/components/cabinet/finance-table";
-import { getFinance } from "@/services/finance";
+import { allFinanceMonths, financeByYears, financeFor, getFinance } from "@/services/finance";
 
 function Bars({ rows, labels, unit = "" }: { rows: { key: string; value: number }[]; labels: Record<string, string | { label: string }>; unit?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -40,9 +40,10 @@ function Bars({ rows, labels, unit = "" }: { rows: { key: string; value: number 
  */
 export async function AnalyticsView({ user, sp, intro }: { user: SessionUser; sp: { period?: string; fm?: string; forbidden?: string }; intro?: React.ReactNode }) {
   const period = [7, 30, 90, 365].includes(Number(one(sp.period))) ? Number(one(sp.period)) : 30;
-  const financeMonths = Number(one(sp.fm)) === 12 ? 12 : 6;
+  // fm: 6 | 12 месяцев или all — все финансовые годы (июнь–май) с начала учёта
+  const financeMonths = one(sp.fm) === "all" ? "all" : Number(one(sp.fm)) === 12 ? 12 : 6;
   const director = user.role === "DIRECTOR";
-  const [a, months, fin] = await Promise.all([getAnalytics(period), getMonthlyStats(12), director ? getFinance(financeMonths) : null]);
+  const [a, months, fin] = await Promise.all([getAnalytics(period), getMonthlyStats(12), director ? (financeMonths === "all" ? financeFor(allFinanceMonths()) : getFinance(financeMonths)) : null]);
   const maxAmount = Math.max(1, ...months.map((m) => m.contractsAmount));
   const sum = (k: keyof Omit<MonthRow, "month">) => months.reduce((s, m) => s + m[k], 0);
   const stageTitle = Object.fromEntries(STAGES.map((s) => [s.code, s.title]));
@@ -54,7 +55,12 @@ export async function AnalyticsView({ user, sp, intro }: { user: SessionUser; sp
         actions={
           <nav className="flex gap-1" aria-label="Период">
             {[7, 30, 90, 365].map((p) => (
-              <Link key={p} href={`?period=${p}&fm=${financeMonths}`} aria-current={p === period ? "page" : undefined} className={`rounded-md px-3 py-1.5 text-sm ${p === period ? "bg-steel-900 text-white" : "border border-line-strong"}`}>
+              <Link
+                key={p}
+                href={`?period=${p}&fm=${financeMonths}`}
+                aria-current={p === period ? "page" : undefined}
+                className={`rounded-md px-3 py-1.5 text-sm ${p === period ? "bg-steel-900 text-white" : "border border-line-strong"}`}
+              >
                 {p} дн.
               </Link>
             ))}
@@ -69,19 +75,24 @@ export async function AnalyticsView({ user, sp, intro }: { user: SessionUser; sp
       {intro && <div className="mb-6">{intro}</div>}
       {fin && (
         <Card
-          title="Финансы по месяцам"
+          title={financeMonths === "all" ? "Финансы по годам (июнь–май)" : "Финансы по месяцам"}
           className="mb-6"
           actions={
             <nav className="flex gap-1" aria-label="Период финансов">
-              {[6, 12].map((n) => (
-                <Link key={n} href={`?period=${period}&fm=${n}`} aria-current={n === financeMonths ? "page" : undefined} className={`rounded-md px-3 py-1 text-xs ${n === financeMonths ? "bg-steel-900 text-white" : "border border-line-strong"}`}>
-                  {n} мес.
+              {([6, 12, "all"] as const).map((n) => (
+                <Link
+                  key={n}
+                  href={`?period=${period}&fm=${n}`}
+                  aria-current={n === financeMonths ? "page" : undefined}
+                  className={`rounded-md px-3 py-1 text-xs ${n === financeMonths ? "bg-steel-900 text-white" : "border border-line-strong"}`}
+                >
+                  {n === "all" ? "За всё время" : `${n} мес.`}
                 </Link>
               ))}
             </nav>
           }
         >
-          <FinanceTable rows={fin.map((r) => ({ ...r, label: monthLabel(r.month) }))} />
+          {financeMonths === "all" ? <FinanceTable rows={financeByYears(fin)} editable={false} /> : <FinanceTable rows={fin.map((r) => ({ ...r, label: monthLabel(r.month) }))} />}
         </Card>
       )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -101,7 +112,12 @@ export async function AnalyticsView({ user, sp, intro }: { user: SessionUser; sp
               <td className="min-w-48">
                 <span className="flex items-center gap-2">
                   <span className="h-2 flex-1 overflow-hidden rounded-full bg-steel-100" aria-hidden="true">
-                    <span className="block h-full rounded-full bg-accent-600" style={{ width: `${(m.contractsAmount / maxAmount) * 100}%` }} />
+                    <span
+                      className="block h-full rounded-full bg-accent-600"
+                      style={{
+                        width: `${(m.contractsAmount / maxAmount) * 100}%`,
+                      }}
+                    />
                   </span>
                   <span className="whitespace-nowrap font-mono text-xs">{rub(m.contractsAmount)}</span>
                 </span>
@@ -126,13 +142,31 @@ export async function AnalyticsView({ user, sp, intro }: { user: SessionUser; sp
       </Card>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <Card title="Источники заявок">
-          <Bars rows={a.leadsBySource.map((s) => ({ key: s.source, value: s.count }))} labels={LEAD_SOURCE} />
+          <Bars
+            rows={a.leadsBySource.map((s) => ({
+              key: s.source,
+              value: s.count,
+            }))}
+            labels={LEAD_SOURCE}
+          />
         </Card>
         <Card title="Заявки по статусам">
-          <Bars rows={a.leadsByStatus.map((s) => ({ key: s.status, value: s.count }))} labels={LEAD_STATUS} />
+          <Bars
+            rows={a.leadsByStatus.map((s) => ({
+              key: s.status,
+              value: s.count,
+            }))}
+            labels={LEAD_STATUS}
+          />
         </Card>
         <Card title="Проекты по статусам">
-          <Bars rows={a.projectsByStatus.map((s) => ({ key: s.status, value: s.count }))} labels={PROJECT_STATUS} />
+          <Bars
+            rows={a.projectsByStatus.map((s) => ({
+              key: s.status,
+              value: s.count,
+            }))}
+            labels={PROJECT_STATUS}
+          />
         </Card>
         <Card title="Загрузка проектировщиков">
           {a.designerLoad.length === 0 ? (

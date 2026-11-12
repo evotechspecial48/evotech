@@ -100,3 +100,18 @@ describe("разбор номеров спецификаций из таблиц
     expect(parseSpec("Д-530")).toBeNull();
   });
 });
+
+describe("лист «Проекты»: финансовые годы июнь–май", async () => {
+  const { parseSheet, fieldOf } = await import("../scripts/import-finance-sheet");
+  it("строки листа → статьи, год блока по порядку, суммирование «прочих»", () => {
+    expect(fieldOf("З/П  Руководитель 2")).toBe("pm");
+    expect(fieldOf("З/П фрилансерам")).toBe("designers");
+    expect(fieldOf("Налог/СРО")).toBe("tax");
+    expect(fieldOf("Прибыль Каждому")).toBeNull();
+    const csv = `"EvoTech\n 2021-2022",Июнь,Июль,Август,Сентябрь,Октябрь,Ноябрь,Декабрь,Январь,Февраль,Март,Апрель,Май,Итог\nВыручка,100,,,,,,,,,,,"12 000",\nАренда,10,,,,,,,,,,,,\nИнтернет,5,,,,,,,,,,,,\n"EvoTech\n 2021-2022",Июнь\nВыручка,7`;
+    const m = parseSheet(csv);
+    expect(m[0]).toMatchObject({ month: "2021-06", revenue: 100, other: 15 });
+    expect(m[11]).toMatchObject({ month: "2022-05", revenue: 12000 });
+    expect(m[12]).toMatchObject({ month: "2022-06", revenue: 7 }); // повторная подпись года — следующий блок
+  });
+});

@@ -895,6 +895,12 @@ model FinanceMonth {
   ads          Int      @default(0)
   adsPlatforms Int      @default(0)
   other        Int      @default(0)
+  /// Факт по таблице учёта (лист «Проекты»): если задан — заменяет расчёт по договорам и формулам
+  revenue      Int?
+  designers    Int?
+  pm           Int?
+  managers     Int?
+  tax          Int?
   updatedById  String?
   updatedAt    DateTime @updatedAt
 }

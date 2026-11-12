@@ -19,6 +19,14 @@ const SORTS: Record<string, Prisma.LeadOrderByWithRelationInput> = {
   updated: { updatedAt: "desc" },
 };
 
+/** Номер договора заявки (последний не аннулированный) — сквозной № заявки с ним не совпадает. */
+const CONTRACT_NO = {
+  where: { status: { not: "CANCELLED" } },
+  select: { number: true },
+  orderBy: { createdAt: "desc" },
+  take: 1,
+} as const;
+
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser(["leads.view_all", "leads.view_own"]);
   const sp = await searchParams;
@@ -43,6 +51,11 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
               { contactName: { contains: q, mode: "insensitive" } },
               { email: { contains: q, mode: "insensitive" } },
               { companyName: { contains: q, mode: "insensitive" } },
+              {
+                contracts: {
+                  some: { number: { contains: q, mode: "insensitive" } },
+                },
+              },
               ...(Number.isFinite(Number(q)) ? [{ number: Number(q) }] : []),
             ],
           }
@@ -51,7 +64,15 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   };
   const canManage = can(user.role, "leads.manage");
   const qs = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ view, q, status, source, manager, sort, ...patch });
+    const p = new URLSearchParams({
+      view,
+      q,
+      status,
+      source,
+      manager,
+      sort,
+      ...patch,
+    });
     for (const [k, v] of [...p.entries()]) if (!v) p.delete(k);
     return `?${p.toString()}`;
   };
@@ -62,7 +83,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <label className="sr-only" htmlFor="q">
         Поиск
       </label>
-      <input id="q" name="q" defaultValue={q} placeholder="Поиск: №, тема, контакт, почта, компания" className={fieldClass} />
+      <input id="q" name="q" defaultValue={q} placeholder="Поиск: № договора, тема, контакт, почта, компания" className={fieldClass} />
       <select name="status" defaultValue={status} className={fieldClass} aria-label="Статус">
         <option value="">Все статусы</option>
         {Object.entries(LEAD_STATUS)
@@ -108,10 +129,18 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
         <>
           {user.role !== "CUSTOMER" && (
             <div className="flex rounded-lg border border-line-strong p-0.5" role="group" aria-label="Вид">
-              <Link href={qs({ view: "list", page: "" })} aria-current={view === "list" ? "page" : undefined} className={`rounded-md px-3 py-1.5 text-sm ${view === "list" ? "bg-steel-900 text-white" : ""}`}>
+              <Link
+                href={qs({ view: "list", page: "" })}
+                aria-current={view === "list" ? "page" : undefined}
+                className={`rounded-md px-3 py-1.5 text-sm ${view === "list" ? "bg-steel-900 text-white" : ""}`}
+              >
                 Список
               </Link>
-              <Link href={qs({ view: "kanban", page: "" })} aria-current={view === "kanban" ? "page" : undefined} className={`rounded-md px-3 py-1.5 text-sm ${view === "kanban" ? "bg-steel-900 text-white" : ""}`}>
+              <Link
+                href={qs({ view: "kanban", page: "" })}
+                aria-current={view === "kanban" ? "page" : undefined}
+                className={`rounded-md px-3 py-1.5 text-sm ${view === "kanban" ? "bg-steel-900 text-white" : ""}`}
+              >
                 Канбан
               </Link>
             </div>
@@ -133,7 +162,12 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
   );
 
   if (view === "kanban") {
-    const leads = await db.lead.findMany({ where, orderBy: SORTS[sort], take: 300, include: { manager: { select: { name: true } } } });
+    const leads = await db.lead.findMany({
+      where,
+      orderBy: SORTS[sort],
+      take: 300,
+      include: { manager: { select: { name: true } }, contracts: CONTRACT_NO },
+    });
     const columns = [...LEAD_FLOW, "lost"] as LeadStatus[];
     return (
       <>
@@ -156,7 +190,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
                       return (
                         <li key={l.id} className="rounded-lg border border-line bg-surface p-3 shadow-[var(--shadow-card)]">
                           <Link href={`/cabinet/leads/${l.id}`} className="text-sm font-medium hover:text-accent-700">
-                            №{l.number} · {l.title}
+                            {l.contracts[0] ? `${l.contracts[0].number} · ` : ""}
+                            {l.title}
                           </Link>
                           <p className="mt-1 text-xs text-muted">
                             {l.contactName}
@@ -189,7 +224,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
 
   const [total, leads] = await Promise.all([
     db.lead.count({ where }),
-    db.lead.findMany({ where, orderBy: SORTS[sort], skip: (page - 1) * PAGE, take: PAGE, include: { manager: { select: { name: true } } } }),
+    db.lead.findMany({
+      where,
+      orderBy: SORTS[sort],
+      skip: (page - 1) * PAGE,
+      take: PAGE,
+      include: { manager: { select: { name: true } }, contracts: CONTRACT_NO },
+    }),
   ]);
   const pages = Math.max(1, Math.ceil(total / PAGE));
   return (
@@ -210,10 +251,13 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             }
           />
         ) : (
-          <Table head={["№", "Тема", "Контакт", "Статус", "Источник", "Ответственный", "Создана"]} caption="Список заявок">
+          <Table head={["№ договора", "Тема", "Контакт", "Статус", "Источник", "Ответственный", "Создана"]} caption="Список заявок">
             {leads.map((l) => (
               <tr key={l.id} className="hover:bg-steel-50">
-                <td className="font-mono text-muted">{l.number}</td>
+                <td className="whitespace-nowrap">
+                  {l.contracts[0]?.number ?? <span className="text-muted">—</span>}
+                  <span className="block text-xs text-muted">заявка {l.number}</span>
+                </td>
                 <td>
                   <Link href={`/cabinet/leads/${l.id}`} className="font-medium hover:text-accent-700">
                     {l.title}
