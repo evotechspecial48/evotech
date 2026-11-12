@@ -26,7 +26,10 @@ import {
   timerResumeAction,
   timerStartAction,
   timerUpdateAction,
+  regenerateClosingAction,
+  sendClosingAction,
 } from "@/app/actions/cabinet";
+import { sbis, SBIS_FAILED } from "@/lib/edo/sbis";
 import { ActionForm, AutoRefresh, ConfirmSubmit, FileUploader, SubmitButton } from "@/components/client";
 import { CommentList, FileList, History } from "@/components/cabinet/shared";
 import { StageActions, VersionUploader } from "@/components/cabinet/stage-widgets";
@@ -49,8 +52,11 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
       members: { include: { user: true } },
       contracts: { orderBy: { createdAt: "desc" }, include: { payments: { where: { status: "paid" }, select: { amount: true } } } },
       timer: { include: { pauses: { orderBy: { startedAt: "desc" } } } },
+      closing: true,
     },
   });
+  const closingDoc = project.closing;
+  const closingInEdo = !!closingDoc?.sbisDocumentId && !SBIS_FAILED.has(closingDoc.sbisStateCode ?? "");
   const manage = access.canManage;
   const [pms, designers] = manage
     ? await Promise.all([
@@ -157,6 +163,71 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
         </Card>
       </div>
       <div className="space-y-6">
+        {(project.status === "COMPLETED" || closingDoc) && (
+          <Card title="Закрывающие документы">
+            {!closingDoc ? (
+              <div className="space-y-3 text-sm">
+                <p className="text-muted">Акт и УПД ещё не сформированы (формируются по подписанным договорам проекта).</p>
+                {manage && (
+                  <ActionForm action={regenerateClosingAction}>
+                    <input type="hidden" name="projectId" value={projectId} />
+                    <SubmitButton size="sm">Сформировать акт и УПД</SubmitButton>
+                  </ActionForm>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <p>
+                  Акт № {closingDoc.number} и УПД от {fmtDate(closingDoc.date)} на {rub(closingDoc.amount)}
+                  {closingDoc.actSource === "tbank" && <span className="text-muted"> · акт выставлен в Т-Бизнесе</span>}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {closingDoc.actFileId && (
+                    <a href={`/api/files/${closingDoc.actFileId}/link`} target="_blank" rel="noopener" className={btnClass("secondary", "sm")}>
+                      Акт PDF
+                    </a>
+                  )}
+                  {closingDoc.updFileId && (
+                    <a href={`/api/files/${closingDoc.updFileId}/link`} target="_blank" rel="noopener" className={btnClass("secondary", "sm")}>
+                      УПД (XML для ЭДО)
+                    </a>
+                  )}
+                  {manage && closingDoc.sbisLink && (
+                    <a href={closingDoc.sbisLink} target="_blank" rel="noopener" className={btnClass("primary", "sm")}>
+                      Открыть в Saby
+                    </a>
+                  )}
+                </div>
+                {closingDoc.sbisDocumentId && <p className="text-muted">ЭДО СБИС: {closingDoc.sbisStateName ?? "отправлено"}{closingDoc.sbisSentAt && ` · загружено ${fmtDateTime(closingDoc.sbisSentAt)}`}</p>}
+                {manage && closingDoc.error && <Alert tone="warning">{closingDoc.error}</Alert>}
+                {manage && !closingInEdo && (
+                  <div className="space-y-3 border-t border-line pt-3">
+                    {sbis() ? (
+                      <ActionForm action={sendClosingAction} className="flex flex-wrap items-end gap-2">
+                        <input type="hidden" name="projectId" value={projectId} />
+                        {!project.customer.company?.inn && (
+                          <>
+                            <input name="inn" required inputMode="numeric" placeholder="ИНН заказчика" className={`${fieldClass} sm:max-w-40`} aria-label="ИНН заказчика" />
+                            <input name="kpp" inputMode="numeric" placeholder="КПП (для организации)" className={`${fieldClass} sm:max-w-44`} aria-label="КПП заказчика" />
+                          </>
+                        )}
+                        <SubmitButton size="sm">Отправить в СБИС</SubmitButton>
+                      </ActionForm>
+                    ) : (
+                      <p className="text-xs text-muted">СБИС не подключён — передайте акт и УПД заказчику файлами.</p>
+                    )}
+                    <ActionForm action={regenerateClosingAction}>
+                      <input type="hidden" name="projectId" value={projectId} />
+                      <SubmitButton size="sm" variant="secondary">
+                        Сформировать заново
+                      </SubmitButton>
+                    </ActionForm>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
         <Card title="Участники">
           <DefList
             items={[

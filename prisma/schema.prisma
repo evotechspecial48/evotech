@@ -322,6 +322,7 @@ model Project {
   comments       Comment[]
   files          FileAsset[]
   contracts      Contract[]
+  closing        ClosingDocument?
   payments       Payment[]
   aiJobs         AIJob[]
   variants       DesignVariant[]
@@ -572,6 +573,10 @@ enum TemplateKind {
   OFFER
   CONTRACT
   QUICK_CONTRACT
+  // Спецификация к действующему договору подряда (повторное обращение заказчика)
+  SPECIFICATION
+  // Акт выполненных работ (закрывающий документ проекта)
+  ACT
 }
 
 model DocumentTemplate {
@@ -603,6 +608,11 @@ model Contract {
   projectId      String?
   project        Project?       @relation(fields: [projectId], references: [id])
   quickOrderId   String?        @unique
+  // Спецификация к договору подряда: ссылка на основной договор и её номер внутри него (1, 2, 3…)
+  parentId       String?
+  parent         Contract?      @relation("ContractSpecs", fields: [parentId], references: [id])
+  specs          Contract[]     @relation("ContractSpecs")
+  specNumber     Int?
   quickOrder     QuickOrder?    @relation(fields: [quickOrderId], references: [id])
   currentVersion Int            @default(1)
   signedAt       DateTime?
@@ -887,4 +897,27 @@ model FinanceMonth {
   other        Int      @default(0)
   updatedById  String?
   updatedAt    DateTime @updatedAt
+}
+
+/// Закрывающие документы проекта: акт выполненных работ (PDF) и УПД (XML ФНС 5.03, статус 2 — без НДС).
+/// Формируются при завершении проекта и отправляются заказчику пакетом «Документ отгрузки» в ЭДО СБИС.
+model ClosingDocument {
+  id             String    @id @default(cuid())
+  number         Int       @unique @default(autoincrement())
+  projectId      String    @unique
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date           DateTime  @default(now())
+  amount         Int
+  actFileId      String?
+  /// tbank — акт выставлен в Т-Бизнесе (PDF банка); template — по шаблону «Акт выполненных работ»
+  actSource      String?
+  updFileId      String?
+  sbisDocumentId String?
+  sbisStateCode  String?
+  sbisStateName  String?
+  sbisLink       String?
+  sbisSentAt     DateTime?
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }

@@ -89,3 +89,14 @@ describe("реквизиты в две колонки из текста Word", (
     expect(tabColumns("Обычный абзац\tс одной табуляцией")).toBeNull();
   });
 });
+
+describe("разбор номеров спецификаций из таблицы", async () => {
+  const { parseSpec } = await import("../scripts/link-specs");
+  it("номер договора и № спецификации в разных написаниях", () => {
+    expect(parseSpec("Д-525 спец2")).toEqual({ base: "Д-525", n: 2 });
+    expect(parseSpec("Д-466 спец №5")).toEqual({ base: "Д-466", n: 5 });
+    expect(parseSpec("Д-460 спец№3")).toEqual({ base: "Д-460", n: 3 });
+    expect(parseSpec("Д-спец 3 · ООО Ромашка")).toEqual({ base: null, n: 3 });
+    expect(parseSpec("Д-530")).toBeNull();
+  });
+});

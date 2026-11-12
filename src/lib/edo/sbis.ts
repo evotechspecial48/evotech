@@ -26,6 +26,11 @@ export interface SbisDocumentInput {
   counterparty: SbisParty;
 }
 
+/** Пакет «Документ отгрузки» (реализация): акт PDF + УПД XML — тип вложений Saby определяет сам. */
+export interface SbisShipmentInput extends Omit<SbisDocumentInput, "file"> {
+  files: { name: string; data: Buffer }[];
+}
+
 export interface SbisDocumentState {
   code: string;
   name: string;
@@ -36,6 +41,7 @@ export interface SbisDocumentState {
 export interface SbisClient {
   readonly name: "sbis" | "sbis-mock";
   createContract(input: SbisDocumentInput): Promise<{ id: string; link: string | null }>;
+  createShipment(input: SbisShipmentInput): Promise<{ id: string; link: string | null }>;
   read(id: string): Promise<SbisDocumentState>;
   download(url: string): Promise<Buffer>;
 }
@@ -106,16 +112,25 @@ class HttpClient implements SbisClient {
   }
 
   async createContract(input: SbisDocumentInput) {
+    const { file, ...rest } = input;
+    return this.write("ДоговорДок", { ...rest, files: [file] });
+  }
+
+  async createShipment(input: SbisShipmentInput) {
+    return this.write("ДокОтгрИсх", input);
+  }
+
+  private async write(type: string, input: SbisShipmentInput) {
     const doc = await this.call<SbisDoc>("СБИС.ЗаписатьДокумент", {
       Документ: {
-        Тип: "ДоговорДок",
+        Тип: type,
         Номер: input.number,
         Дата: ddmmyyyy(input.date),
         Сумма: input.amount.toFixed(2),
         Примечание: input.note.slice(0, 500),
         НашаОрганизация: sbisParty(input.our),
         Контрагент: sbisParty(input.counterparty),
-        Вложение: [{ Идентификатор: randomUUID(), Служебный: "Нет", Название: input.file.name, Файл: { Имя: input.file.name, ДвоичныеДанные: input.file.data.toString("base64") } }],
+        Вложение: input.files.map((f) => ({ Идентификатор: randomUUID(), Служебный: "Нет", Название: f.name, Файл: { Имя: f.name, ДвоичныеДанные: f.data.toString("base64") } })),
       },
     });
     if (!doc.Идентификатор) throw new Error("СБИС не вернул идентификатор документа");
@@ -142,10 +157,16 @@ class HttpClient implements SbisClient {
 /** Демо-клиент для разработки и тестов: документ «подписывается» по команде теста. */
 export class MockSbisClient implements SbisClient {
   readonly name = "sbis-mock" as const;
-  readonly docs = new Map<string, SbisDocumentState & { input: SbisDocumentInput }>();
-  async createContract(input: SbisDocumentInput) {
+  readonly docs = new Map<string, SbisDocumentState & { type: string; input: SbisShipmentInput }>();
+  async createContract({ file, ...rest }: SbisDocumentInput) {
+    return this.add("ДоговорДок", { ...rest, files: [file] });
+  }
+  async createShipment(input: SbisShipmentInput) {
+    return this.add("ДокОтгрИсх", input);
+  }
+  private async add(type: string, input: SbisShipmentInput) {
     const id = randomUUID();
-    this.docs.set(id, { code: "0", name: "Документ редактируется", link: `https://online.sbis.ru/doc/${id}`, files: [], input });
+    this.docs.set(id, { code: "0", name: "Документ редактируется", link: `https://online.sbis.ru/doc/${id}`, files: [], type, input });
     return { id, link: `https://online.sbis.ru/doc/${id}` };
   }
   async read(id: string) {

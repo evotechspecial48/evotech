@@ -5,8 +5,10 @@ import { orNotFound } from "@/lib/page";
 import { can } from "@/domain/rbac";
 import { CONTRACT_STATUS, LEAD_SOURCE, LEAD_STATUS, OFFER_STATUS, SPEC_STATUS } from "@/domain/labels";
 import { loadLeadAccess } from "@/services/scope";
+import { parentContractsForLead } from "@/services/contracts";
 import {
   convertLeadAction,
+  createSpecificationAction,
   deleteContractAction,
   deleteLeadAction,
   deleteOfferAction,
@@ -55,6 +57,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const visibleOffers = isCustomer ? lead.offers.filter((o) => o.status !== "DRAFT") : lead.offers;
   const contract = lead.contracts.find((c) => c.status !== "CANCELLED");
   const lastOffer = lead.offers[0];
+  // Повторное обращение: у заказчика уже есть подписанный договор — оформляется спецификация к нему
+  const parents = !contract && can(user.role, "contracts.manage") ? await parentContractsForLead(lead) : [];
   const utm = (lead.utm ?? {}) as Record<string, string>;
 
   return (
@@ -221,7 +225,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             {contract ? (
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                 <Link href={`/cabinet/contracts/${contract.id}`} className="font-medium text-accent-700 hover:underline">
-                  Договор {contract.number} · {rub(contract.amount)} · {contract.termDays} раб. дн.
+                  {contract.parentId ? "Спецификация" : "Договор"} {contract.number} · {rub(contract.amount)} · {contract.termDays} раб. дн.
                 </Link>
                 <span className="flex items-center gap-2">
                   <StatusBadge map={CONTRACT_STATUS} value={contract.status} />
@@ -238,6 +242,30 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               </div>
             ) : can(user.role, "contracts.manage") && !["won", "lost"].includes(lead.status) ? (
               <>
+                {parents.length > 0 && (
+                  <ActionForm action={createSpecificationAction} className="mb-4 grid gap-3 rounded-lg border border-accent-200 bg-accent-50/40 p-3 sm:grid-cols-2">
+                    <input type="hidden" name="leadId" value={lead.id} />
+                    <p className="text-sm sm:col-span-2">
+                      Заказчик уже работает по договору — повторный заказ оформляется <b>спецификацией</b> к нему (своя сумма, срок и ТЗ). Новый договор — ниже, если нужен.
+                    </p>
+                    <label className="text-sm sm:col-span-2">
+                      <span className="mb-1 block text-xs text-muted">Договор</span>
+                      <select name="parentId" className={fieldClass}>
+                        {parents.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            Спецификация № {p._count.specs + 1} к договору {p.number}
+                            {p.signedAt ? ` от ${fmtDate(p.signedAt)}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <NumField name="amount" label="Сумма, ₽ *" defaultValue={lastOffer?.total} />
+                    <NumField name="termDays" label="Срок, раб. дн. *" defaultValue={lastOffer?.termDays ?? 20} />
+                    <div className="sm:col-span-2">
+                      <SubmitButton size="sm">Оформить спецификацию</SubmitButton>
+                    </div>
+                  </ActionForm>
+                )}
                 <ContractCreator leadId={lead.id} defaultAmount={lastOffer?.total ?? 100000} defaultTerm={lastOffer?.termDays ?? 20} />
                 <details className="mt-4 rounded-lg border border-line p-3">
                   <summary className="cursor-pointer text-sm font-medium">Загрузить готовый договор (PDF / Word)</summary>

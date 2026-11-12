@@ -9,6 +9,7 @@ import { checkStageTransition, STAGES, type StageAction, type StageStatusT } fro
 import { ForbiddenError } from "@/domain/rbac";
 import { loadProjectAccess } from "./scope";
 import { notifyTimerChange, syncAutoPause } from "./timer";
+import { onProjectCompleted } from "./closing";
 
 /** Заказчик видит версии, переданные ему на согласование (внутренние черновики и проверки скрыты). */
 export const CUSTOMER_VISIBLE_VERSION = {
@@ -157,6 +158,9 @@ export async function stageAction(user: SessionUser, stageId: string, action: St
     }
   });
   await audit({ actorId: user.id, action: "stage.transition", entityType: "ProjectStage", entityId: stageId, projectId: stage.projectId, meta: { action, from: stage.status, to: check.to, comment } });
+
+  // Последний этап выполнен — проект завершён: акт и УПД заказчику
+  if (action === "complete" && stage.code === STAGES[STAGES.length - 1].code) await onProjectCompleted(stage.projectId, user.id);
 
   // Таймер: ожидание согласования заказчиком — пауза; решение заказчика — возобновление
   const change = await syncAutoPause(stage.projectId, user.id);

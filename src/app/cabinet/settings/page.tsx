@@ -6,7 +6,7 @@ import { updateSettingsAction, updateTemplateAction } from "@/app/actions/cabine
 import { ActionForm, SubmitButton } from "@/components/client";
 import { Badge, Card, DefList, fieldClass, fmtDateTime, PageHeader } from "@/components/ui";
 
-const KIND: Record<string, string> = { CONTRACT: "Договор на проектирование", QUICK_CONTRACT: "Договор быстрого заказа", OFFER: "Коммерческое предложение" };
+const KIND: Record<string, string> = { CONTRACT: "Договор на проектирование", QUICK_CONTRACT: "Договор быстрого заказа", OFFER: "Коммерческое предложение", SPECIFICATION: "Спецификация к договору", ACT: "Акт выполненных работ" };
 
 export default async function SettingsPage() {
   await requireUser("settings.manage");

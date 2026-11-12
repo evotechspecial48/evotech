@@ -20,6 +20,19 @@ export function fioFrom(name: string): SbisParty["fio"] {
   return { last: words[0], first: words[1], middle: words[2] };
 }
 
+/** Проверка ИНН/КПП из формы и сохранение их в карточку организации заказчика. */
+export async function saveCustomerInn(customerId: string, input: { inn: string; kpp: string }) {
+  const inn = input.inn.replace(/\s/g, "");
+  const kpp = input.kpp.replace(/\s/g, "");
+  if (!/^(\d{10}|\d{12})$/.test(inn)) throw new UserError("ИНН заказчика — 10 цифр для организации, 12 — для ИП", { inn: "10 или 12 цифр" });
+  if (inn.length === 10 && !/^\d{9}$/.test(kpp)) throw new UserError("Для организации укажите КПП", { kpp: "9 цифр" });
+  const customer = await db.user.findUniqueOrThrow({ where: { id: customerId }, include: { company: true } });
+  const companyName = customer.company?.name ?? customer.name;
+  if (customer.companyId) await db.company.update({ where: { id: customer.companyId }, data: { inn, kpp: kpp || null } });
+  else await db.user.update({ where: { id: customer.id }, data: { company: { create: { name: companyName, inn, kpp: kpp || null } } } });
+  return { inn, kpp, customer, companyName };
+}
+
 export async function sendContractToSbis(user: SessionUser, contractId: string, input: { inn: string; kpp: string }) {
   if (!can(user.role, "contracts.manage")) throw new ForbiddenError("Отправлять договоры в СБИС может менеджер или директор");
   const client = sbis();
@@ -28,16 +41,7 @@ export async function sendContractToSbis(user: SessionUser, contractId: string, 
   if (!contract) throw new NotFoundError("Договор");
   if (contract.status !== "AWAITING_SIGNATURE") throw new UserError("В СБИС отправляется договор, ожидающий подписания");
   if (contract.sbisDocumentId && !SBIS_FAILED.has(contract.sbisStateCode ?? "")) throw new UserError("Договор уже отправлен в СБИС — дождитесь подписания или отзовите документ в Saby");
-  const inn = input.inn.replace(/\s/g, "");
-  const kpp = input.kpp.replace(/\s/g, "");
-  if (!/^(\d{10}|\d{12})$/.test(inn)) throw new UserError("ИНН заказчика — 10 цифр для организации, 12 — для ИП", { inn: "10 или 12 цифр" });
-  if (inn.length === 10 && !/^\d{9}$/.test(kpp)) throw new UserError("Для организации укажите КПП", { kpp: "9 цифр" });
-
-  const customer = await db.user.findUniqueOrThrow({ where: { id: contract.customerId }, include: { company: true } });
-  const companyName = customer.company?.name ?? customer.name;
-  // Реквизиты из формы сохраняются в карточку организации заказчика
-  if (customer.companyId) await db.company.update({ where: { id: customer.companyId }, data: { inn, kpp: kpp || null } });
-  else await db.user.update({ where: { id: customer.id }, data: { company: { create: { name: companyName, inn, kpp: kpp || null } } } });
+  const { inn, kpp, customer, companyName } = await saveCustomerInn(contract.customerId, input);
 
   const r = await companyRequisites();
   const version = contract.versions[0];

@@ -52,6 +52,16 @@ export interface TbankBusinessClient {
   qrState(qrId: string): Promise<BankPaymentState>;
   /** Скачивание PDF счёта по ссылке банка (ссылка действует 10 дней). */
   downloadPdf(url: string): Promise<Buffer | null>;
+  /** Акт выполненных работ в Т-Бизнесе («Выставление закрывающих документов»); без contacts банк ничего не рассылает. */
+  createAct(input: ActInput): Promise<{ pdfUrl: string | null }>;
+}
+
+export interface ActInput {
+  number: string;
+  date: string; // ГГГГ-ММ-ДД
+  buyer: { name: string; inn?: string | null; kpp?: string | null; address?: string | null };
+  items: { name: string; price: number }[];
+  footer?: string;
 }
 
 export function mapInvoiceStatus(status: string): BankPaymentState {
@@ -139,6 +149,17 @@ class HttpClient implements TbankBusinessClient {
     return mapQrStatus(r.status);
   }
 
+  async createAct(input: ActInput) {
+    const r = await this.call<{ pdfUrl?: string }>("POST", "/api/v1/providedServicesAct/submit", {
+      documentNumber: input.number.slice(0, 30),
+      date: input.date,
+      buyer: { name: input.buyer.name.slice(0, 512), ...(input.buyer.inn ? { inn: input.buyer.inn } : {}), ...(input.buyer.kpp ? { kpp: input.buyer.kpp } : {}), ...(input.buyer.address ? { address: input.buyer.address } : {}) },
+      items: input.items.map((i) => ({ name: i.name.slice(0, 1000), unit: "усл.", price: i.price, vat: "None", amount: 1 })),
+      ...(input.footer ? { footerComment: input.footer.slice(0, 1000) } : {}),
+    });
+    return { pdfUrl: r.pdfUrl ?? null };
+  }
+
   async downloadPdf(url: string): Promise<Buffer | null> {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
@@ -170,6 +191,9 @@ class MockClient implements TbankBusinessClient {
   }
   async downloadPdf(): Promise<Buffer | null> {
     return null;
+  }
+  async createAct() {
+    return { pdfUrl: null };
   }
 }
 

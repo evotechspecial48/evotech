@@ -18,7 +18,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
   const user = await requireUser(["contracts.manage", "contracts.accept", "projects.view_all"]);
   const contract = await db.contract.findUnique({
     where: { id },
-    include: { versions: { orderBy: { version: "desc" } }, acceptances: { include: { version: true } }, payments: true, lead: { select: { id: true, number: true } }, project: { select: { id: true, number: true } }, quickOrder: { select: { id: true, number: true } } },
+    include: { versions: { orderBy: { version: "desc" } }, acceptances: { include: { version: true } }, payments: true, lead: { select: { id: true, number: true } }, project: { select: { id: true, number: true } }, quickOrder: { select: { id: true, number: true } }, parent: { select: { id: true, number: true } }, specs: { select: { id: true, number: true, amount: true, status: true }, orderBy: { specNumber: "asc" } } },
   });
   if (!contract) notFound();
   const isOwner = contract.customerId === user.id;
@@ -34,7 +34,7 @@ export default async function ContractPage({ params, searchParams }: { params: P
     <>
       <PageHeader
         back={{ href: "/cabinet/contracts", label: "К договорам" }}
-        title={`Договор ${contract.number}`}
+        title={`${contract.parentId ? "Спецификация" : "Договор"} ${contract.number}`}
         subtitle={`${rub(contract.amount)} · ${contract.termDays} раб. дн. · заказчик ${customer?.name}`}
         actions={
           <>
@@ -116,6 +116,23 @@ export default async function ContractPage({ params, searchParams }: { params: P
           <Card title="Основание">
             <DefList
               items={[
+                ["К договору", contract.parent ? <Link key="pc" href={`/cabinet/contracts/${contract.parent.id}`} className="text-accent-700">{contract.parent.number}</Link> : null],
+                [
+                  "Спецификации",
+                  contract.specs.length ? (
+                    <span key="sp" className="block space-y-1">
+                      {contract.specs.map((s) => (
+                        <Link key={s.id} href={`/cabinet/contracts/${s.id}`} className="block text-accent-700">
+                          {s.number} · {rub(s.amount)}
+                          {s.status === "CANCELLED" ? " (аннулирована)" : ""}
+                        </Link>
+                      ))}
+                      <span className="block text-xs text-muted">
+                        Всего по договору: {rub(contract.amount + contract.specs.filter((s) => s.status !== "CANCELLED").reduce((a, s) => a + s.amount, 0))}
+                      </span>
+                    </span>
+                  ) : null,
+                ],
                 ["Заявка", contract.lead ? <Link key="l" href={`/cabinet/leads/${contract.lead.id}`} className="text-accent-700">№{contract.lead.number}</Link> : null],
                 ["Проект", contract.project ? <Link key="p" href={`/cabinet/projects/${contract.project.id}`} className="text-accent-700">№{contract.project.number}</Link> : null],
                 ["Быстрый заказ", contract.quickOrder ? <Link key="q" href={`/cabinet/quick-orders/${contract.quickOrder.id}`} className="text-accent-700">№{contract.quickOrder.number}</Link> : null],

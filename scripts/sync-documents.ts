@@ -6,13 +6,15 @@
 import type { Prisma, TemplateKind } from "@prisma/client";
 import { db } from "../src/lib/db";
 import { COMPANY_REQUISITES } from "../prisma/company";
-import { CONTRACT_TEMPLATE, OFFER_TEMPLATE, QUICK_CONTRACT_TEMPLATE } from "../prisma/templates";
+import { CONTRACT_TEMPLATE, OFFER_TEMPLATE, QUICK_CONTRACT_TEMPLATE, SPECIFICATION_TEMPLATE, ACT_TEMPLATE } from "../prisma/templates";
 
 const dry = process.argv.includes("--dry");
 const TEMPLATES: { kind: TemplateKind; name: string; body: string }[] = [
   { kind: "CONTRACT", name: "Договор подряда (бланк компании)", body: CONTRACT_TEMPLATE },
   { kind: "QUICK_CONTRACT", name: "Договор-оферта быстрого заказа", body: QUICK_CONTRACT_TEMPLATE },
   { kind: "OFFER", name: "Коммерческое предложение (условия по бланку)", body: OFFER_TEMPLATE },
+  { kind: "SPECIFICATION", name: "Спецификация к договору подряда", body: SPECIFICATION_TEMPLATE },
+  { kind: "ACT", name: "Акт выполненных работ", body: ACT_TEMPLATE },
 ];
 
 async function main() {

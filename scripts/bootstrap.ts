@@ -4,7 +4,7 @@
 
 import type { Prisma, TemplateKind } from "@prisma/client";
 import { db } from "../src/lib/db";
-import { CONTRACT_TEMPLATE, OFFER_TEMPLATE, QUICK_CONTRACT_TEMPLATE } from "../prisma/templates";
+import { CONTRACT_TEMPLATE, OFFER_TEMPLATE, QUICK_CONTRACT_TEMPLATE, SPECIFICATION_TEMPLATE, ACT_TEMPLATE } from "../prisma/templates";
 import { COMPANY_REQUISITES } from "../prisma/company";
 
 const SETTINGS: Record<string, Prisma.InputJsonValue> = {
@@ -18,6 +18,8 @@ const TEMPLATES: { kind: TemplateKind; name: string; body: string }[] = [
   { kind: "CONTRACT", name: "Договор на проектные работы", body: CONTRACT_TEMPLATE },
   { kind: "QUICK_CONTRACT", name: "Договор-оферта быстрого заказа", body: QUICK_CONTRACT_TEMPLATE },
   { kind: "OFFER", name: "Коммерческое предложение", body: OFFER_TEMPLATE },
+  { kind: "SPECIFICATION", name: "Спецификация к договору подряда", body: SPECIFICATION_TEMPLATE },
+  { kind: "ACT", name: "Акт выполненных работ", body: ACT_TEMPLATE },
 ];
 
 async function main() {

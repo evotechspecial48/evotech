@@ -8,6 +8,7 @@ import { STAGES } from "@/domain/stage";
 import { ForbiddenError } from "@/domain/rbac";
 import { loadLeadAccess, loadProjectAccess } from "./scope";
 import { notifyTimerChange, syncAutoPause } from "./timer";
+import { onProjectCompleted } from "./closing";
 
 export async function defaultTimeMode(): Promise<"CALENDAR" | "WORKING"> {
   const s = await db.setting.findUnique({ where: { key: "timer.defaultMode" } });
@@ -182,6 +183,7 @@ export async function completeProject(user: SessionUser, projectId: string, comm
     await tx.customerRequest.updateMany({ where: { projectId, status: "OPEN" }, data: { status: "CANCELLED" } });
   });
   await audit({ actorId: user.id, action: "project.complete", entityType: "Project", entityId: projectId, projectId, meta: { comment: note, early: true } });
+  await onProjectCompleted(projectId, user.id);
   await notify([access.info.customerId, ...access.info.memberIds], "status.changed", `Проект №${access.project.number} завершён`, note, `/cabinet/projects/${projectId}`, { exceptUserId: user.id });
 }
 

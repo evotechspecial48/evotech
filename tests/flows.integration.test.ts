@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { ForbiddenError } from "@/domain/rbac";
 import { UserError } from "@/lib/errors";
 import { createLead, changeLeadStatus, createOffer, deleteLead, deleteOffer, updateLeadContacts, updateOffer, uploadOffer } from "@/services/leads";
-import { acceptContract, createLeadContract, deleteContract, requestContractOtp, uploadLeadContract } from "@/services/contracts";
+import { acceptContract, createLeadContract, createSpecification, deleteContract, parentContractsForLead, requestContractOtp, uploadLeadContract } from "@/services/contracts";
 import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject, setMemberPay } from "@/services/projects";
 import { createManualProject } from "@/services/customers";
 import { requestPasswordReset, resetPassword, updateUser } from "@/services/users";
@@ -13,6 +13,8 @@ import { cancelInvoice, issueContractPayment, markPaidManually } from "@/service
 import { sendContractToSbis, syncSbisContracts } from "@/services/edo";
 import { MockSbisClient, setSbisClient } from "@/lib/edo/sbis";
 import { getFinance, getSalary, saveFinanceMonth } from "@/services/finance";
+import { regenerateClosingDocs, sendClosingByUser, syncSbisClosing } from "@/services/closing";
+import { buildUpdXml, toCp1251 } from "@/lib/edo/upd";
 import { monthRange } from "@/domain/months";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
@@ -68,6 +70,8 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
       data: [
         { kind: "CONTRACT", name: "Договор", body: "Договор {{number}} с {{customerName}} на {{amount}} руб., срок {{termDays}} дн. ".repeat(3) },
         { kind: "QUICK_CONTRACT", name: "Оферта", body: "Оферта {{number}}: {{structure}} {{dimensions}}, {{amount}} руб. ".repeat(3) },
+        { kind: "ACT", name: "Акт", body: "Акт № {{actNumber}} от {{date}}. Основание: {{basis}}.\n{{rows}}\nИтого {{amount}} руб. ".repeat(2) },
+        { kind: "SPECIFICATION", name: "Спецификация", body: "Спецификация № {{specNumber}} к договору {{parentNumber}} от {{parentDate}}: {{amount}} руб. ".repeat(3) },
       ],
     });
   });
@@ -105,6 +109,32 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     expect(full.timer?.startedAt).not.toBeNull();
     expect(full.timer?.durationDays).toBe(20);
     expect(full.lead?.status).toBe("won");
+  });
+
+  it("повторное обращение: спецификация № N к действующему договору, подписание и проект как у договора", async () => {
+    const parent = await db.contract.findFirstOrThrow({ where: { customerId: customer.id, status: "SIGNED", parentId: null, quickOrderId: null } });
+    const lead = await createLead({ title: "Навес", contactName: "Заказчик", email: "cust@t.ru", source: "site_form" }, null, null);
+    expect((await parentContractsForLead(lead)).map((c) => c.id)).toContain(parent.id);
+    await expect(createSpecification(sales, lead.id, "нет-такого", 50000, 10)).rejects.toBeInstanceOf(UserError);
+
+    const spec = await createSpecification(sales, lead.id, parent.id, 50000, 10);
+    expect(spec.number).toBe(`${parent.number} спец №1`);
+    const row = await db.contract.findUniqueOrThrow({ where: { id: spec.id }, include: { versions: true } });
+    expect(row.parentId).toBe(parent.id);
+    expect(row.specNumber).toBe(1);
+    expect(row.versions[0].body).toContain(`Спецификация № 1 к договору ${parent.number}`);
+    await expect(createSpecification(sales, lead.id, parent.id, 50000, 10)).rejects.toBeInstanceOf(UserError); // по заявке уже есть
+
+    await requestContractOtp(customer, spec.id);
+    await acceptContract(customer, spec.id, await lastOtp("cust@t.ru"), true, null, null);
+    const p = await convertLeadToProject(sales, lead.id, pm.id);
+    expect((await db.contract.findUniqueOrThrow({ where: { id: spec.id } })).projectId).toBe(p.id);
+
+    // Следующая спецификация — № 2; к спецификации спецификацию не оформить
+    const lead2 = await createLead({ title: "Лестница", contactName: "Заказчик", email: "cust@t.ru", source: "site_form" }, null, null);
+    expect((await parentContractsForLead(lead2)).map((c) => c.id)).not.toContain(spec.id);
+    expect((await createSpecification(sales, lead2.id, parent.id, 30000, 5)).number).toBe(`${parent.number} спец №2`);
+    await expect(createSpecification(customer, lead2.id, parent.id, 1, 1)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it("изоляция: чужой заказчик и неназначенный проектировщик не видят проект", async () => {
@@ -265,6 +295,47 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     expect(done.timer?.pauses.every((p) => p.endedAt)).toBe(true);
     expect(done.requests.every((r) => r.status !== "OPEN")).toBe(true);
     await expect(completeProject(pm, project.id, "Повторно")).rejects.toBeInstanceOf(UserError);
+
+    // Завершение формирует акт (PDF) и УПД (XML ФНС, windows-1251); СБИС не подключён — документы только в проекте
+    const closingDoc = await db.closingDocument.findUniqueOrThrow({ where: { projectId: project.id } });
+    expect(closingDoc.amount).toBe(150000);
+    expect(closingDoc.actSource).toBe("template");
+    expect(closingDoc.sbisDocumentId).toBeNull();
+    const updAsset = await db.fileAsset.findUniqueOrThrow({ where: { id: closingDoc.updFileId! } });
+    expect(updAsset.originalName).toMatch(/^ON_NSCHFDOPPR_.*.xml$/);
+    expect(updAsset.projectId).toBe(project.id);
+    await expect(regenerateClosingDocs(designer, project.id)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("акт и УПД: XML в windows-1251, отправка пакетом «Документ отгрузки» в СБИС, подписание заказчиком", async () => {
+    const xml = buildUpdXml({ number: "7", date: new Date("2026-11-12T09:00:00Z"), seller: { inn: "481303880005", name: "ИП Тест", fio: { last: "Тестов", first: "Тест" } }, buyer: { inn: "4800000001", kpp: "480001001", name: "ООО «Ромашка» & Ко" }, rows: [{ title: "Работы", amount: 150000 }], basis: [{ name: "Договор", number: "Д-1", date: new Date("2026-10-01") }], signer: { last: "Тестов", first: "Тест" } });
+    expect(xml.xml).toContain('ИННЮЛ="4800000001"');
+    expect(xml.xml).toContain("ООО «Ромашка» &amp; Ко");
+    expect(xml.xml).toContain('СтТовУчНалВсего="150000.00"');
+    const bytes = toCp1251("Акт № ё");
+    expect([...bytes]).toEqual([0xc0, 0xea, 0xf2, 0x20, 0xb9, 0x20, 0xb8]);
+
+    const project = await db.project.findFirstOrThrow({ where: { closing: { isNot: null } }, include: { closing: true } });
+    const mock = new MockSbisClient();
+    setSbisClient(mock);
+    try {
+      await sendClosingByUser(pm, project.id, { inn: "", kpp: "" });
+      const sent = await db.closingDocument.findUniqueOrThrow({ where: { projectId: project.id } });
+      const doc = mock.docs.get(sent.sbisDocumentId!)!;
+      expect(doc.type).toBe("ДокОтгрИсх");
+      expect(doc.input.files.map((f) => f.name.slice(-4))).toEqual([".pdf", ".xml"]);
+      expect(doc.input.counterparty.inn).toBe("4800000001");
+      await expect(sendClosingByUser(pm, project.id, { inn: "", kpp: "" })).rejects.toBeInstanceOf(UserError); // уже в ЭДО
+      await expect(regenerateClosingDocs(pm, project.id)).rejects.toBeInstanceOf(UserError);
+
+      doc.code = "7";
+      doc.name = "Выполнение завершено успешно";
+      expect(await syncSbisClosing()).toBe(1);
+      expect((await db.closingDocument.findUniqueOrThrow({ where: { projectId: project.id } })).sbisStateCode).toBe("7");
+      expect(await syncSbisClosing()).toBe(0);
+    } finally {
+      setSbisClient(null);
+    }
   });
 
   it("директор меняет почту (логин) сотрудника: проверка формата и занятости, сброс подтверждения", async () => {
@@ -351,7 +422,7 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
       const sent = await sendContractToSbis(sales, contract.id, { inn: "4800000003", kpp: "480001001" });
       const doc = mock.docs.get(sent.id)!;
       expect(doc.input.counterparty).toMatchObject({ inn: "4800000003", kpp: "480001001" });
-      expect(doc.input.file.data.subarray(0, 4).toString()).toBe("%PDF");
+      expect(doc.input.files[0].data.subarray(0, 4).toString()).toBe("%PDF");
       await expect(sendContractToSbis(sales, contract.id, { inn: "4800000003", kpp: "480001001" })).rejects.toBeInstanceOf(UserError); // повторно — нельзя
 
       // Пока контрагент не подписал — договор ждёт; подписание кодом из письма по-прежнему доступно

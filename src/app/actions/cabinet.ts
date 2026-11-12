@@ -16,6 +16,7 @@ import type { QuickOrderParams } from "@/domain/quick-order";
 import { SPEC_FIELDS } from "@/domain/spec";
 import * as leads from "@/services/leads";
 import * as projects from "@/services/projects";
+import * as closing from "@/services/closing";
 import * as specs from "@/services/specs";
 import * as stages from "@/services/stages";
 import * as timer from "@/services/timer";
@@ -149,6 +150,14 @@ export async function createContractAction(_: ActionState, fd: FormData): Promis
   return runAction(async () => {
     const user = await actor("contracts.manage");
     const c = await contracts.createLeadContract(user, str(fd, "leadId"), num(fd, "amount") ?? 0, num(fd, "termDays") ?? 0);
+    return { ok: true, data: { redirect: `/cabinet/contracts/${c.id}` } };
+  });
+}
+
+export async function createSpecificationAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("contracts.manage");
+    const c = await contracts.createSpecification(user, str(fd, "leadId"), str(fd, "parentId"), num(fd, "amount") ?? 0, num(fd, "termDays") ?? 0);
     return { ok: true, data: { redirect: `/cabinet/contracts/${c.id}` } };
   });
 }
@@ -287,6 +296,22 @@ export async function completeProjectAction(_: ActionState, fd: FormData): Promi
     const user = await actor("projects.manage");
     await projects.completeProject(user, str(fd, "projectId"), str(fd, "comment", 500));
     return { ok: true, message: "Проект завершён" };
+  });
+}
+
+export async function regenerateClosingAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("projects.manage");
+    await closing.regenerateClosingDocs(user, str(fd, "projectId"));
+    return { ok: true, message: "Акт и УПД сформированы" };
+  });
+}
+
+export async function sendClosingAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("projects.manage");
+    await closing.sendClosingByUser(user, str(fd, "projectId"), { inn: str(fd, "inn", 12), kpp: str(fd, "kpp", 9) });
+    return { ok: true, message: "Акт и УПД загружены в СБИС — подпишите и отправьте их в Saby" };
   });
 }
 

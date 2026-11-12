@@ -7,6 +7,7 @@ import { retryFailedEmails } from "../src/lib/mailer";
 import { refreshTimers } from "../src/services/timer";
 import { syncBankPayments } from "../src/services/invoices";
 import { syncSbisContracts } from "../src/services/edo";
+import { syncSbisClosing } from "../src/services/closing";
 import { logger } from "../src/lib/logger";
 
 const TICK_MS = 5_000;
@@ -26,6 +27,8 @@ async function tick() {
       if (paid) logger.info("worker.bank_payments", { changed: paid });
       const edo = await syncSbisContracts();
       if (edo) logger.info("worker.sbis_contracts", { changed: edo });
+      const closing = await syncSbisClosing();
+      if (closing) logger.info("worker.sbis_closing", { changed: closing });
     }
     if (jobs || mails) logger.info("worker.tick", { jobs, mails });
   } catch (err) {

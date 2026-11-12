@@ -133,6 +133,66 @@ export async function previewLeadContract(user: SessionUser, leadId: string, amo
   return renderTemplate(tpl.body, vars);
 }
 
+/**
+ * Действующие договоры подряда заказчика заявки (подписанные, не спецификации) — к ним при повторном
+ * обращении оформляется спецификация вместо нового договора. Договор бессрочный.
+ */
+export async function parentContractsForLead(lead: { customerId: string | null; email: string | null }) {
+  const customerId = lead.customerId ?? (lead.email ? (await db.user.findFirst({ where: { email: lead.email, role: "CUSTOMER" }, select: { id: true } }))?.id : null);
+  if (!customerId) return [];
+  return db.contract.findMany({
+    where: { customerId, status: "SIGNED", parentId: null, quickOrderId: null },
+    select: { id: true, number: true, signedAt: true, customerId: true, _count: { select: { specs: true } } },
+    orderBy: { signedAt: "desc" },
+  });
+}
+
+/**
+ * Спецификация № N к действующему договору подряда (повторное обращение того же заказчика):
+ * своя сумма, срок и ТЗ заявки; подписание, счета и проект — как у договора.
+ */
+export async function createSpecification(user: SessionUser, leadId: string, parentId: string, amount: number, termDays: number) {
+  if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
+  if (amount <= 0 || termDays <= 0) throw new UserError("Укажите сумму и срок");
+  const lead = await loadLeadAccess(user, leadId);
+  if (["won", "lost"].includes(lead.status)) throw new UserError("Заявка закрыта");
+  const open = await db.contract.findFirst({ where: { leadId, status: { in: ["AWAITING_SIGNATURE", "SIGNED"] } } });
+  if (open) throw new UserError(`По заявке уже есть ${open.parentId ? "спецификация" : "договор"} ${open.number}`);
+  const parent = (await parentContractsForLead(lead)).find((c) => c.id === parentId);
+  if (!parent) throw new UserError("Действующий договор заказчика не найден — оформите новый договор");
+  const customer = await db.user.findUniqueOrThrow({ where: { id: parent.customerId }, include: { company: true } });
+  const last = await db.contract.aggregate({ where: { parentId }, _max: { specNumber: true } });
+  const specNumber = (last._max.specNumber ?? 0) + 1;
+  const number = `${parent.number} спец №${specNumber}`;
+  const tpl = await activeTemplate("SPECIFICATION");
+  const body = renderTemplate(
+    tpl.body,
+    await contractVars({
+      number,
+      customerName: lead.contactName,
+      customerEmail: customer.email,
+      customerPhone: lead.phone ?? customer.phone,
+      companyName: lead.companyName ?? customer.company?.name,
+      subject: lead.title,
+      amount,
+      termDays,
+      extra: { specNumber: String(specNumber), parentNumber: parent.number, parentDate: parent.signedAt ? longDate(parent.signedAt) : "" },
+    }),
+  );
+  const contract = await db.$transaction(async (tx) => {
+    const c = await createContractTx(tx, { number, customerId: customer.id, amount, termDays, body, templateId: tpl.id, leadId, createdById: user.id });
+    await tx.contract.update({ where: { id: c.id }, data: { parentId, specNumber } });
+    await tx.lead.update({ where: { id: leadId }, data: { customerId: customer.id, ...(lead.status !== "awaiting_signature" ? { status: "awaiting_signature" } : {}) } });
+    if (lead.status !== "awaiting_signature") {
+      await tx.statusChange.create({ data: { entityType: "Lead", entityId: leadId, fromStatus: lead.status, toStatus: "awaiting_signature", actorId: user.id, comment: `Спецификация № ${specNumber} к договору ${parent.number}` } });
+    }
+    return c;
+  });
+  await audit({ actorId: user.id, action: "contract.create", entityType: "Contract", entityId: contract.id, meta: { number, amount, parent: parent.number, specNumber } });
+  await notify([customer.id], "approval.pending", `Спецификация № ${specNumber} к договору ${parent.number} ожидает подписания`, `Сумма ${money(amount)} ₽, срок ${termDays} дн.`, `/cabinet/contracts/${contract.id}`);
+  return contract;
+}
+
 /** Договор по заявке: заказчик приглашается в кабинет (если ещё не зарегистрирован), заявка → «Ожидает подписания». */
 export async function createLeadContract(user: SessionUser, leadId: string, amount: number, termDays: number) {
   if (!can(user.role, "contracts.manage")) throw new ForbiddenError();
