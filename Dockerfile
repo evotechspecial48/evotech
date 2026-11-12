@@ -28,7 +28,8 @@ COPY --from=build /app/assets ./assets
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-RUN mkdir -p /app/storage && chown -R node:node /app/storage
+# .next/cache — кэш оптимизированных картинок next/image, пишется от пользователя node
+RUN mkdir -p /app/storage /app/.next/cache && chown -R node:node /app/storage /app/.next/cache
 USER node
 EXPOSE 3000
 # Миграции применяет отдельный шаг (сервис migrate на образе воркера с полным набором зависимостей)
