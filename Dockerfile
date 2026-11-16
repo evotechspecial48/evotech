@@ -13,6 +13,9 @@ COPY . .
 # Адрес сайта нужен на этапе сборки (sitemap, metadataBase). Секреты сюда не попадают:
 # ниже — только заглушки для проверки переменных при сборке, боевые значения приходят из .env при запуске.
 ARG APP_URL=http://localhost:3000
+# Номер счётчика Яндекс Метрики (не секрет) встраивается в клиентский код при сборке
+ARG NEXT_PUBLIC_YM_ID=
+ENV NEXT_PUBLIC_YM_ID=$NEXT_PUBLIC_YM_ID
 ENV NEXT_TELEMETRY_DISABLED=1 APP_URL=$APP_URL     APP_SECRET=build-time-placeholder-not-a-secret     DATABASE_URL=postgresql://build:build@localhost:5432/build
 RUN npx prisma generate && npm run build
 

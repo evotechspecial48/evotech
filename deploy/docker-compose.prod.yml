@@ -39,6 +39,7 @@ services:
       target: app
       args:
         APP_URL: ${APP_URL}
+        NEXT_PUBLIC_YM_ID: ${NEXT_PUBLIC_YM_ID:-}
     image: evotech-app:latest
     restart: unless-stopped
     depends_on:
@@ -67,6 +68,7 @@ services:
       target: worker
       args:
         APP_URL: ${APP_URL}
+        NEXT_PUBLIC_YM_ID: ${NEXT_PUBLIC_YM_ID:-}
     image: evotech-worker:latest
     restart: unless-stopped
     depends_on:

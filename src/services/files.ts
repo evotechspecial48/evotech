@@ -7,7 +7,7 @@ import { sha256, signPayload } from "@/lib/crypto";
 import { scanner, storage } from "@/lib/storage";
 import { UserError, NotFoundError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth";
-import { checkUpload, safeFileName } from "@/domain/files";
+import { checkUpload, LEAD_FORM_FILES, safeFileName } from "@/domain/files";
 import { can, ForbiddenError } from "@/domain/rbac";
 import { loadLeadAccess, loadProjectAccess } from "./scope";
 import { CUSTOMER_VISIBLE_VERSION } from "./stages";
@@ -117,6 +117,39 @@ export async function saveUpload(user: SessionUser, file: File, target: UploadTa
   });
   await audit({ actorId: user.id, action: "file.upload", entityType: "FileAsset", entityId: asset.id, projectId: asset.projectId, ip, meta: { name, size: asset.size } });
   return asset;
+}
+
+/** Вложения формы заявки с сайта — проверка до создания заявки: формат, размер, количество. */
+export function checkLeadFiles(files: File[]): string | null {
+  if (files.length > LEAD_FORM_FILES.max) return `Можно прикрепить не более ${LEAD_FORM_FILES.max} файлов`;
+  if (files.reduce((s, f) => s + f.size, 0) > LEAD_FORM_FILES.totalMb * 1024 * 1024) return `Общий размер файлов — не более ${LEAD_FORM_FILES.totalMb} МБ`;
+  for (const f of files) {
+    const check = checkUpload(safeFileName(f.name), f.size, LEAD_FORM_FILES.totalMb);
+    if (!check.ok) return `${f.name}: ${check.reason}`;
+  }
+  return null;
+}
+
+/** Сохранение вложений заявки с сайта (посетитель без кабинета) — исходные данные, видны менеджеру в заявке. */
+export async function saveLeadFiles(leadId: string, files: File[], ip: string | null): Promise<number> {
+  let saved = 0;
+  for (const file of files) {
+    const name = safeFileName(file.name);
+    const check = checkUpload(name, file.size, LEAD_FORM_FILES.totalMb);
+    if (!check.ok) continue;
+    const data = Buffer.from(await file.arrayBuffer());
+    const scan = await scanner.scan(data, name);
+    if (scan === "INFECTED") {
+      await audit({ action: "file.rejected", ip, meta: { name, reason: "infected", leadId } });
+      continue;
+    }
+    const key = await storageKeyFor({ leadId }, name);
+    await storage().put(key, data, check.mime);
+    await db.fileAsset.create({ data: { originalName: name, storageKey: key, mimeType: check.mime, size: data.length, checksum: sha256(data), category: "SOURCE", scanStatus: scan, leadId, uploadedById: null } });
+    saved++;
+  }
+  if (saved) await audit({ action: "file.upload", entityType: "Lead", entityId: leadId, ip, meta: { files: saved, via: "site_form" } });
+  return saved;
 }
 
 /** Сохранение файла, сформированного системой (договор, архив). */

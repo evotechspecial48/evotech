@@ -14,11 +14,12 @@ import { sendContractToSbis, syncSbisContracts } from "@/services/edo";
 import { MockSbisClient, setSbisClient } from "@/lib/edo/sbis";
 import { getFinance, getSalary, saveFinanceMonth } from "@/services/finance";
 import { regenerateClosingDocs, sendClosingByUser, syncSbisClosing } from "@/services/closing";
+import { collectConversions, conversionsCsv } from "@/services/metrika";
 import { buildUpdXml, toCp1251 } from "@/lib/edo/upd";
 import { monthRange } from "@/domain/months";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
-import { saveGenerated } from "@/services/files";
+import { checkLeadFiles, saveGenerated, saveLeadFiles } from "@/services/files";
 import { createQuickOrder, selectVariant, archiveAccess } from "@/services/quick-orders";
 import { createQuickOrderPayment, handlePaymentNotification, simulateMockBank } from "@/services/payments";
 import { processJob } from "@/services/ai-jobs";
@@ -382,8 +383,28 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
   });
 
   it("заявка по телефону без почты: почта нужна только для договора; правка контактов, правка КП, удаление", async () => {
-    // Сайт и заказчик — только с почтой; сотрудник — можно без
+    // Сайт: обязателен один канал связи — телефон или почта; сотрудник — можно без обоих
     await expect(createLead({ title: "Навес", contactName: "Иван", source: "site_form" }, null, null)).rejects.toBeInstanceOf(UserError);
+    await expect(createLead({ title: "Навес", contactName: "Иван", phone: "12345", source: "site_form" }, null, null)).rejects.toBeInstanceOf(UserError); // слишком короткий
+    const byPhone = await createLead({ title: "Заявка с сайта", contactName: "Иван", phone: "+7 900 111-22-33", source: "site_form", utm: { ymClientId: "1700000000123456789" } }, null, null);
+    expect(byPhone.email).toBeNull();
+
+    // Вложения формы: проверка до создания заявки, сохранение как исходные данные заявки
+    expect(checkLeadFiles([new File(["x"], "virus.exe")])).toMatch(/не поддерживается/);
+    expect(checkLeadFiles(Array.from({ length: 11 }, (_, i) => new File(["x"], `${i}.pdf`)))).toMatch(/не более 10/);
+    const files = [new File(["%PDF-1.4"], "ТЗ.pdf"), new File(["dwg"], "plan.DWG"), new File(["ifc"], "model.ifc"), new File(["img"], "фото.heic")];
+    expect(checkLeadFiles(files)).toBeNull();
+    expect(await saveLeadFiles(byPhone.id, files, null)).toBe(4);
+    expect(await db.fileAsset.count({ where: { leadId: byPhone.id, category: "SOURCE" } })).toBe(4);
+
+    // Офлайн-конверсии Метрики: квалификация (КП) и подписанный договор — по одной на заявку
+    await changeLeadStatus(sales, byPhone.id, "commercial_offer", "");
+    expect(await collectConversions()).toBe(1);
+    expect(await collectConversions()).toBe(0);
+    const conv = await db.metrikaConversion.findFirstOrThrow({ where: { leadId: byPhone.id } });
+    expect(conv).toMatchObject({ goal: "qualified_lead", clientId: "1700000000123456789", sentAt: null });
+    expect(conversionsCsv([{ clientId: "1", goal: "contract_signed", at: new Date(1_800_000_000_000), price: 150000 }])).toBe("ClientId,Target,DateTime,Price,Currency\n1,contract_signed,1800000000,150000,RUB\n");
+
     const lead = await createLead({ title: "Нагрузки КМ", contactName: "ООО СМАРТ ЮГ", phone: "89785802000", source: "phone" }, sales, null);
     expect(lead.email).toBeNull();
     await expect(createLeadContract(sales, lead.id, 35000, 10)).rejects.toThrow(/почту заказчика/);

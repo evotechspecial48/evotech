@@ -354,6 +354,10 @@ export default function HomePage() {
                 {COMPANY.legalName}, ИНН {COMPANY.inn}, ОГРНИП {COMPANY.ogrnip}
               </dd>
             </div>
+            <div>
+              <dt className="text-xs text-muted">Допуск СРО</dt>
+              <dd className="mt-1">Член саморегулируемой организации в области проектирования, рег. № {COMPANY.sro}</dd>
+            </div>
           </dl>
           <div className="rounded-[var(--radius-card)] border border-line bg-bg p-6 sm:p-8">
             <h3 className="mb-4 text-lg font-semibold">Написать нам</h3>

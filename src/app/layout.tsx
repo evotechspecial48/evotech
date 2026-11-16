@@ -8,6 +8,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./globals.css";
 import { PwaRegister } from "@/components/pwa";
+import { YandexMetrika } from "@/components/metrika";
 
 const siteUrl = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         {children}
         <PwaRegister />
+        <YandexMetrika />
       </body>
     </html>
   );

@@ -11,6 +11,10 @@ export const ALLOWED_EXTENSIONS: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
+  // Фото с телефона: iPhone (HEIC) и Android (WEBP)
+  heic: "image/heic",
+  heif: "image/heif",
+  webp: "image/webp",
   dwg: "application/acad",
   dxf: "image/vnd.dxf",
   ifc: "application/x-step",
@@ -38,6 +42,9 @@ export function checkUpload(name: string, size: number, maxSizeMb = DEFAULT_MAX_
   if (size > maxSizeMb * 1024 * 1024) return { ok: false, reason: `Размер превышает ${maxSizeMb} МБ` };
   return { ok: true, ext, mime: ALLOWED_EXTENSIONS[ext] };
 }
+
+/** Вложения публичной формы заявки: до 10 файлов, всего до 100 МБ. */
+export const LEAD_FORM_FILES = { max: 10, totalMb: 100, accept: ".pdf,.dwg,.dxf,.ifc,.xlsx,.docx,.zip,.rar,.7z,.jpg,.jpeg,.png,.heic,.heif,.webp,.step,.stp" };
 
 /** Безопасное имя для заголовка Content-Disposition и хранения. */
 export function safeFileName(name: string): string {

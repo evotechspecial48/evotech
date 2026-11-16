@@ -12,7 +12,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client", "bcryptjs", "nodemailer", "pdf-lib", "@pdf-lib/fontkit"],
   experimental: {
-    serverActions: { bodySizeLimit: "30mb" },
+    // 100 МБ — вложения формы заявки (DWG, IFC, архивы); см. LEAD_FORM_FILES
+    serverActions: { bodySizeLimit: "110mb" },
   },
   async headers() {
     return [

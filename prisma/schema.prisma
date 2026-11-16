@@ -927,3 +927,20 @@ model ClosingDocument {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
+
+/// Офлайн-конверсия Яндекс Метрики по заявке с сайта (ClientID посетителя из cookie _ym_uid):
+/// qualified_lead — заявка дошла до КП, contract_signed — договор подписан. Отправляет воркер.
+model MetrikaConversion {
+  id        String    @id @default(cuid())
+  leadId    String
+  goal      String
+  clientId  String
+  at        DateTime
+  price     Int?
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime  @default(now())
+
+  @@unique([leadId, goal])
+  @@index([sentAt])
+}

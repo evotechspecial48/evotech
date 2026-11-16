@@ -68,7 +68,8 @@ export default async function CabinetLayout({ children }: { children: React.Reac
           </div>
         </header>
         {/* Снизу на телефоне — панель вкладок: отступ, чтобы она не закрывала содержимое */}
-        <main id="main" className="mx-auto max-w-[1400px] px-4 pb-28 pt-5 sm:px-6 lg:py-8">
+        {/* ym-hide-content — Вебвизор Метрики не записывает содержимое кабинета (договоры, суммы, данные заказчиков) */}
+        <main id="main" className="ym-hide-content mx-auto max-w-[1400px] px-4 pb-28 pt-5 sm:px-6 lg:py-8">
           {children}
         </main>
       </div>

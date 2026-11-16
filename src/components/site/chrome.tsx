@@ -139,6 +139,8 @@ export function SiteFooter() {
           <p className="mt-4 text-xs text-steel-400">
             {COMPANY.legalName}, ИНН {COMPANY.inn}, ОГРНИП {COMPANY.ogrnip}
             <br />
+            Член СРО, рег. № {COMPANY.sro}
+            <br />
             {COMPANY.address}
           </p>
         </div>

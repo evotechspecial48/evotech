@@ -8,6 +8,7 @@ import { refreshTimers } from "../src/services/timer";
 import { syncBankPayments } from "../src/services/invoices";
 import { syncSbisContracts } from "../src/services/edo";
 import { syncSbisClosing } from "../src/services/closing";
+import { syncMetrika } from "../src/services/metrika";
 import { logger } from "../src/lib/logger";
 
 const TICK_MS = 5_000;
@@ -29,6 +30,8 @@ async function tick() {
       if (edo) logger.info("worker.sbis_contracts", { changed: edo });
       const closing = await syncSbisClosing();
       if (closing) logger.info("worker.sbis_closing", { changed: closing });
+      const ym = await syncMetrika();
+      if (ym.collected || ym.sent) logger.info("worker.metrika", ym);
     }
     if (jobs || mails) logger.info("worker.tick", { jobs, mails });
   } catch (err) {

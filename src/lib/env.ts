@@ -34,6 +34,9 @@ const schema = z.object({
   TBANK_BUSINESS_API_URL: z.string().default("https://business.tbank.ru/openapi"),
   // ЭДО СБИС (Saby): логин и пароль отдельного пользователя с правами на ЭДО; тестовый стенд — https://fix-online.sbis.ru
   SBIS_LOGIN: z.string().optional(),
+  // Яндекс Метрика: номер счётчика (тот же, что в клиентском коде) и OAuth-токен с правом metrika:write — офлайн-конверсии
+  NEXT_PUBLIC_YM_ID: z.string().optional(),
+  YM_OAUTH_TOKEN: z.string().optional(),
   SBIS_PASSWORD: z.string().optional(),
   SBIS_API_URL: z.string().default("https://online.sbis.ru"),
 });

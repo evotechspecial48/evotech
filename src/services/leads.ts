@@ -26,11 +26,13 @@ export interface LeadInput {
   referrer?: string | null;
 }
 
-export function validateLead(input: LeadInput, emailRequired = true): Record<string, string> {
+/** contactRequired — заявка с сайта: обязателен один канал связи, телефон или почта. */
+export function validateLead(input: LeadInput, contactRequired = true): Record<string, string> {
   const e: Record<string, string> = {};
   if (input.contactName.length < 2) e.contactName = "Укажите имя";
-  if (input.email ? !isEmail(normalizeEmail(input.email)) : emailRequired) e.email = input.email ? "Некорректный адрес почты" : "Укажите почту";
-  if (input.phone && !/^[\d\s()+-]{6,20}$/.test(input.phone)) e.phone = "Некорректный телефон";
+  if (input.email && !isEmail(normalizeEmail(input.email))) e.email = "Некорректный адрес почты";
+  if (input.phone && !(/^[\d\s()+-]{6,20}$/.test(input.phone) && input.phone.replace(/\D/g, "").length >= 10)) e.phone = "Некорректный телефон";
+  if (contactRequired && !input.email && !input.phone) e.phone = e.email = "Укажите телефон или почту";
   if (input.title.length < 3) e.title = "Кратко опишите задачу";
   return e;
 }

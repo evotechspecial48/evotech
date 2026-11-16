@@ -9,17 +9,24 @@ import { rateLimit } from "@/lib/rate-limit";
 import { createSession, destroySession, getSessionUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { createLead } from "@/services/leads";
+import { checkLeadFiles, saveLeadFiles } from "@/services/files";
 import { acceptInvite, authenticate, registerCustomer, requestPasswordReset, resetPassword, verifyEmail } from "@/services/users";
 
 const SOURCES: LeadSource[] = ["site_form", "site_calculator", "site_contact"];
 
+/** UTM первого визита + ClientID Яндекс Метрики (cookie _ym_uid) — для офлайн-конверсий по заявке. */
 async function utmFromCookie(): Promise<Record<string, string> | null> {
+  const jar = await cookies();
+  let utm: Record<string, string> = {};
   try {
-    const raw = (await cookies()).get("evo_utm")?.value;
-    return raw ? (JSON.parse(raw) as Record<string, string>) : null;
+    const raw = jar.get("evo_utm")?.value;
+    if (raw) utm = JSON.parse(raw) as Record<string, string>;
   } catch {
-    return null;
+    // повреждённая cookie — без меток
   }
+  const ym = jar.get("_ym_uid")?.value;
+  if (ym && /^\d{5,30}$/.test(ym)) utm.ymClientId = ym;
+  return Object.keys(utm).length ? utm : null;
 }
 
 /** Публичная заявка: honeypot, минимальное время заполнения, лимит по IP, согласие на обработку ПДн. */
@@ -34,6 +41,9 @@ export async function submitLeadAction(_: ActionState, fd: FormData): Promise<Ac
     if (fd.get("consent") !== "on") throw new UserError("Нужно согласие на обработку персональных данных", { consent: "Отметьте согласие" });
     const sourceRaw = str(fd, "source") as LeadSource;
     const source = SOURCES.includes(sourceRaw) ? sourceRaw : "site_form";
+    const files = fd.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+    const fileError = checkLeadFiles(files);
+    if (fileError) throw new UserError(fileError, { files: fileError });
     const user = await getSessionUser();
     const lead = await createLead(
       {
@@ -52,7 +62,9 @@ export async function submitLeadAction(_: ActionState, fd: FormData): Promise<Ac
       user?.role === "CUSTOMER" ? user : null,
       ip,
     );
-    return { ok: true, message: `Заявка №${lead.number} принята. Менеджер свяжется с вами в течение рабочего дня.` };
+    const saved = files.length ? await saveLeadFiles(lead.id, files, ip) : 0;
+    // Страница благодарности — цели Метрики «отправка формы» и «загрузка ТЗ»
+    return { ok: true, message: `Заявка №${lead.number} принята.`, data: { redirect: `/spasibo?n=${lead.number}&s=${lead.source}${saved ? "&f=1" : ""}` } };
   });
 }
 
@@ -94,6 +106,8 @@ export async function registerAction(_: ActionState, fd: FormData): Promise<Acti
   });
   if (res?.ok) {
     const next = str(fd, "next");
+    // Разовая отметка для цели Метрики «успешная регистрация» — читает и стирает скрипт счётчика
+    (await cookies()).set("evo_goal", "registration", { maxAge: 300, path: "/", sameSite: "lax" });
     redirect(next.startsWith("/cabinet") ? next : "/cabinet?welcome=1");
   }
   return res;
