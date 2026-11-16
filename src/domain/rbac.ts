@@ -71,6 +71,8 @@ export const ROLE_PERMISSIONS: Record<RoleCode, ReadonlySet<Permission>> = {
     "requests.create", "timer.manage",
     "files.upload", "files.download", "files.view_internal",
     "payments.view_all", "quick_orders.view_all", "analytics.view", "data.export",
+    // Договоры: счета по договору, отправка в ЭДО СБИС, правка и учёт — как у менеджера проектов
+    "contracts.manage",
   ]),
   SALES_MANAGER: new Set<Permission>([
     "leads.view_all", "leads.manage", "leads.create", "offers.manage",

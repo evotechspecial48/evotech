@@ -6,6 +6,7 @@ import { navFor, ROLE_LABELS } from "@/domain/rbac";
 import { Logo } from "@/components/site/chrome";
 import { NavLinks } from "@/components/cabinet/nav-links";
 import { MobileNav } from "@/components/cabinet/mobile-nav";
+import { NavProgress } from "@/components/cabinet/nav-progress";
 import { logoutAction } from "@/app/actions/public";
 import { btnClass } from "@/components/ui";
 
@@ -74,6 +75,7 @@ export default async function CabinetLayout({ children }: { children: React.Reac
         </main>
       </div>
       <MobileNav items={items} logout={logoutAction} />
+      <NavProgress />
     </div>
   );
 }
