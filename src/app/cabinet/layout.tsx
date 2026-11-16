@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { navFor, ROLE_LABELS } from "@/domain/rbac";
 import { Logo } from "@/components/site/chrome";
 import { NavLinks } from "@/components/cabinet/nav-links";
+import { MobileNav } from "@/components/cabinet/mobile-nav";
 import { logoutAction } from "@/app/actions/public";
 import { btnClass } from "@/components/ui";
 
@@ -47,18 +48,10 @@ export default async function CabinetLayout({ children }: { children: React.Reac
       </aside>
 
       <div className="min-w-0">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur sm:px-6">
-          <details className="relative lg:hidden">
-            <summary className={`${btnClass("ghost", "sm")} list-none`} aria-label="Меню кабинета">
-              ☰ Меню
-            </summary>
-            <nav aria-label="Разделы кабинета" className="absolute left-0 top-11 z-30 max-h-[75vh] w-72 overflow-y-auto rounded-xl border border-line bg-surface p-2 shadow-lg">
-              <NavLinks items={items} />
-              <form action={logoutAction} className="mt-2 border-t border-line pt-2">
-                <button className="w-full rounded-md px-3 py-2 text-left text-sm text-muted">Выйти</button>
-              </form>
-            </nav>
-          </details>
+        <header className="sticky top-0 z-20 flex h-14 items-center pt-[env(safe-area-inset-top)] lg:h-16 justify-between gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur sm:px-6">
+          <Link href="/cabinet" aria-label="Кабинет — главная" className="lg:hidden">
+            <Logo />
+          </Link>
           <p className="hidden truncate text-sm text-muted lg:block">
             {ROLE_LABELS[user.role]} · <span className="text-ink">{user.name}</span>
           </p>
@@ -74,10 +67,12 @@ export default async function CabinetLayout({ children }: { children: React.Reac
             </Link>
           </div>
         </header>
-        <main id="main" className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:py-8">
+        {/* Снизу на телефоне — панель вкладок: отступ, чтобы она не закрывала содержимое */}
+        <main id="main" className="mx-auto max-w-[1400px] px-4 pb-28 pt-5 sm:px-6 lg:py-8">
           {children}
         </main>
       </div>
+      <MobileNav items={items} logout={logoutAction} />
     </div>
   );
 }

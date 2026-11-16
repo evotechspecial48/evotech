@@ -15,7 +15,11 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "30mb" },
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Service worker должен обновляться сразу после выкладки
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }] },
+    ];
   },
   // Разделы «О компании», «Услуги», «Как мы работаем», «Контакты» объединены на главной странице
   async redirects() {

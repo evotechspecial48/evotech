@@ -18,7 +18,7 @@ const BTN: Record<BtnVariant, string> = {
 export const btnClass = (variant: BtnVariant = "primary", size: "sm" | "md" | "lg" = "md") =>
   cx(
     "inline-flex items-center justify-center gap-2 rounded-lg border font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-55 whitespace-nowrap",
-    size === "sm" ? "px-3 py-1.5 text-sm" : size === "lg" ? "px-6 py-3 text-base" : "px-4 py-2 text-sm",
+    size === "sm" ? "min-h-10 px-3 py-2 text-sm sm:min-h-0 sm:py-1.5" : size === "lg" ? "px-6 py-3 text-base" : "px-4 py-2 text-sm",
     BTN[variant],
   );
 
@@ -203,7 +203,7 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export const fieldClass =
-  "w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-steel-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-100 aria-[invalid=true]:border-danger-700";
+  "w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-base text-ink sm:py-2 sm:text-sm placeholder:text-steel-400 focus:border-accent-500 focus:outline-none focus:ring-2 focus:ring-accent-100 aria-[invalid=true]:border-danger-700";
 
 export function Field({ label, name, error, hint, required, children }: { label: string; name: string; error?: string; hint?: string; required?: boolean; children: ReactNode }) {
   return (

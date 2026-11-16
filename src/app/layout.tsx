@@ -7,6 +7,7 @@ import "@fontsource/ibm-plex-sans/700.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./globals.css";
+import { PwaRegister } from "@/components/pwa";
 
 const siteUrl = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -18,9 +19,11 @@ export const metadata: Metadata = {
   keywords: ["проектирование металлоконструкций", "КМ", "КМД", "Tekla Structures", "чертежи КМД", "проект навеса", "3D-модель"],
   openGraph: { type: "website", locale: "ru_RU", siteName: "ЭвоТех" },
   robots: { index: true, follow: true },
+  // Установленное на iPhone веб-приложение: без адресной строки, название под иконкой
+  appleWebApp: { capable: true, title: "ЭвоТех", statusBarStyle: "default" },
 };
 
-export const viewport: Viewport = { themeColor: "#202426", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#202426", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -30,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Перейти к содержимому
         </a>
         {children}
+        <PwaRegister />
       </body>
     </html>
   );
