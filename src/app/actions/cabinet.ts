@@ -302,6 +302,14 @@ export async function regenerateClosingAction(_: ActionState, fd: FormData): Pro
   });
 }
 
+export async function closingRequisitesAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("projects.manage");
+    const doc = await closing.saveClosingRequisites(user, str(fd, "projectId"), { inn: str(fd, "inn", 12), kpp: str(fd, "kpp", 9), ogrn: str(fd, "ogrn", 15), address: str(fd, "address", 300) });
+    return { ok: true, message: doc?.actFileId ? "Реквизиты сохранены, акт и УПД сформированы" : "Реквизиты заказчика сохранены" };
+  });
+}
+
 export async function sendClosingAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const user = await actor("projects.manage");

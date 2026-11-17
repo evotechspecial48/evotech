@@ -21,15 +21,19 @@ export function fioFrom(name: string): SbisParty["fio"] {
 }
 
 /** Проверка ИНН/КПП из формы и сохранение их в карточку организации заказчика. */
-export async function saveCustomerInn(customerId: string, input: { inn: string; kpp: string }) {
+/** Реквизиты заказчика из формы → карточка его организации. ОГРН, адрес и название — необязательные (пусто — не меняются). */
+export async function saveCustomerInn(customerId: string, input: { inn: string; kpp: string; ogrn?: string; address?: string; name?: string }) {
   const inn = input.inn.replace(/\s/g, "");
   const kpp = input.kpp.replace(/\s/g, "");
+  const ogrn = (input.ogrn ?? "").replace(/\s/g, "");
   if (!/^(\d{10}|\d{12})$/.test(inn)) throw new UserError("ИНН заказчика — 10 цифр для организации, 12 — для ИП", { inn: "10 или 12 цифр" });
   if (inn.length === 10 && !/^\d{9}$/.test(kpp)) throw new UserError("Для организации укажите КПП", { kpp: "9 цифр" });
+  if (ogrn && !/^\d{13}(\d{2})?$/.test(ogrn)) throw new UserError("ОГРН — 13 цифр, ОГРНИП — 15", { ogrn: "13 или 15 цифр" });
   const customer = await db.user.findUniqueOrThrow({ where: { id: customerId }, include: { company: true } });
-  const companyName = customer.company?.name ?? customer.name;
-  if (customer.companyId) await db.company.update({ where: { id: customer.companyId }, data: { inn, kpp: kpp || null } });
-  else await db.user.update({ where: { id: customer.id }, data: { company: { create: { name: companyName, inn, kpp: kpp || null } } } });
+  const companyName = input.name?.trim() || customer.company?.name || customer.name;
+  const data = { name: companyName, inn, kpp: kpp || null, ...(ogrn ? { ogrn } : {}), ...(input.address?.trim() ? { legalAddress: input.address.trim() } : {}) };
+  if (customer.companyId) await db.company.update({ where: { id: customer.companyId }, data });
+  else await db.user.update({ where: { id: customer.id }, data: { company: { create: data } } });
   return { inn, kpp, customer, companyName };
 }
 

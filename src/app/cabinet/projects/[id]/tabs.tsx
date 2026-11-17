@@ -28,6 +28,7 @@ import {
   timerUpdateAction,
   regenerateClosingAction,
   sendClosingAction,
+  closingRequisitesAction,
 } from "@/app/actions/cabinet";
 import { sbis, SBIS_FAILED } from "@/lib/edo/sbis";
 import { ActionForm, AutoRefresh, ConfirmSubmit, FileUploader, SubmitButton } from "@/components/client";
@@ -176,6 +177,31 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
       <div className="space-y-6">
         {!designer && (project.status === "COMPLETED" || closingDoc) && (
           <Card title="Закрывающие документы">
+            {/* Реквизиты заказчика для акта и УПД: обязателен ИНН, остальное Т-Бизнес подставит по нему */}
+            {manage && !closingInEdo && (
+              <details className="mb-4 rounded-lg border border-line p-3 text-sm" open={!project.customer.company?.inn}>
+                <summary className="cursor-pointer font-medium">
+                  {project.customer.company?.inn
+                    ? `Реквизиты заказчика: ИНН ${project.customer.company.inn}${project.customer.company.ogrn ? `, ОГРН ${project.customer.company.ogrn}` : ""}`
+                    : "Реквизиты заказчика — укажите ИНН"}
+                </summary>
+                {!project.customer.company?.inn && (
+                  <div className="mt-2">
+                    <Alert tone="warning">Без ИНН заказчика акт и УПД не формируются. Название и адрес Т-Бизнес подставит по ИНН, ОГРН и адрес можно не заполнять.</Alert>
+                  </div>
+                )}
+                <ActionForm action={closingRequisitesAction} className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <input type="hidden" name="projectId" value={projectId} />
+                  <input name="inn" required inputMode="numeric" defaultValue={project.customer.company?.inn ?? ""} placeholder="ИНН *" className={fieldClass} aria-label="ИНН заказчика" />
+                  <input name="kpp" inputMode="numeric" defaultValue={project.customer.company?.kpp ?? ""} placeholder="КПП (для организации)" className={fieldClass} aria-label="КПП заказчика" />
+                  <input name="ogrn" inputMode="numeric" defaultValue={project.customer.company?.ogrn ?? ""} placeholder="ОГРН / ОГРНИП" className={fieldClass} aria-label="ОГРН заказчика" />
+                  <input name="address" defaultValue={project.customer.company?.legalAddress ?? ""} placeholder="Юридический адрес" className={fieldClass} aria-label="Юридический адрес заказчика" />
+                  <div className="sm:col-span-2">
+                    <SubmitButton size="sm">{closingDoc?.actFileId ? "Сохранить и пересобрать акт" : "Сохранить и сформировать акт"}</SubmitButton>
+                  </div>
+                </ActionForm>
+              </details>
+            )}
             {!closingDoc ? (
               <div className="space-y-3 text-sm">
                 <p className="text-muted">Акт и УПД ещё не сформированы (формируются по подписанным договорам проекта).</p>
@@ -215,19 +241,15 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
                     {closingDoc.sbisSentAt && ` · загружено ${fmtDateTime(closingDoc.sbisSentAt)}`}
                   </p>
                 )}
-                {manage && closingDoc.error && <Alert tone="warning">{closingDoc.error}</Alert>}
+                {manage && closingDoc.error && project.customer.company?.inn && <Alert tone="warning">{closingDoc.error}</Alert>}
                 {manage && !closingInEdo && (
                   <div className="space-y-3 border-t border-line pt-3">
                     {sbis() ? (
                       <ActionForm action={sendClosingAction} className="flex flex-wrap items-end gap-2">
                         <input type="hidden" name="projectId" value={projectId} />
-                        {!project.customer.company?.inn && (
-                          <>
-                            <input name="inn" required inputMode="numeric" placeholder="ИНН заказчика" className={`${fieldClass} sm:max-w-40`} aria-label="ИНН заказчика" />
-                            <input name="kpp" inputMode="numeric" placeholder="КПП (для организации)" className={`${fieldClass} sm:max-w-44`} aria-label="КПП заказчика" />
-                          </>
-                        )}
-                        <SubmitButton size="sm">Отправить в СБИС</SubmitButton>
+                        <SubmitButton size="sm" disabled={!closingDoc.actFileId}>
+                          Отправить в СБИС
+                        </SubmitButton>
                       </ActionForm>
                     ) : (
                       <p className="text-xs text-muted">СБИС не подключён — передайте акт и УПД заказчику файлами.</p>

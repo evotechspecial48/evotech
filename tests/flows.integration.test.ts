@@ -13,7 +13,7 @@ import { cancelInvoice, issueContractPayment, markPaidManually } from "@/service
 import { sendContractToSbis, syncSbisContracts } from "@/services/edo";
 import { MockSbisClient, setSbisClient } from "@/lib/edo/sbis";
 import { getFinance, getSalary, saveFinanceMonth } from "@/services/finance";
-import { regenerateClosingDocs, sendClosingByUser, syncSbisClosing } from "@/services/closing";
+import { MISSING_REQUISITES, prepareClosingDocs, regenerateClosingDocs, saveClosingRequisites, sendClosingByUser, syncSbisClosing } from "@/services/closing";
 import { collectConversions, conversionsCsv } from "@/services/metrika";
 import { buildUpdXml, toCp1251 } from "@/lib/edo/upd";
 import { monthRange } from "@/domain/months";
@@ -563,5 +563,28 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
       expect(actions.has(a), a).toBe(true);
     }
     void director;
+  });
+
+  it("акт и УПД без ИНН заказчика не формируются; реквизиты из блока документов попадают в акт", async () => {
+    // Первый проект: заказчик без организации и ИНН
+    await db.closingDocument.deleteMany({ where: { projectId } });
+    const noInn = await prepareClosingDocs(projectId, null);
+    expect(noInn).toMatchObject({ error: MISSING_REQUISITES, actFileId: null, updFileId: null });
+
+    await expect(saveClosingRequisites(pm, projectId, { inn: "123", kpp: "", ogrn: "", address: "" })).rejects.toBeInstanceOf(UserError);
+    await expect(saveClosingRequisites(pm, projectId, { inn: "4800000009", kpp: "480001001", ogrn: "12", address: "" })).rejects.toThrow(/ОГРН/);
+    await saveClosingRequisites(pm, projectId, { inn: "4800000009", kpp: "480001001", ogrn: "1024800000009", address: "г. Липецк, ул. Тестовая, 9" });
+    const company = (await db.user.findUniqueOrThrow({ where: { id: customer.id }, include: { company: true } })).company;
+    expect(company).toMatchObject({ inn: "4800000009", kpp: "480001001", ogrn: "1024800000009", legalAddress: "г. Липецк, ул. Тестовая, 9" });
+
+    const doc = await prepareClosingDocs(projectId, null);
+    expect(doc?.actFileId).not.toBeNull();
+    expect(doc?.error).toBeNull();
+    // Шаблонный акт (Т-Бизнес в тестах не подключён) содержит ИНН, КПП, ОГРН и адрес заказчика
+    const act = await db.fileAsset.findUniqueOrThrow({ where: { id: doc!.actFileId! } });
+    expect(act.originalName).toMatch(/^Акт_/);
+    // Не влияем на другие проверки
+    await db.closingDocument.deleteMany({ where: { projectId } });
+    await db.company.update({ where: { id: company!.id }, data: { inn: null, kpp: null, ogrn: null, legalAddress: null } });
   });
 });

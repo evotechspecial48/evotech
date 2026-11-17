@@ -24,6 +24,8 @@ import { loadProjectAccess } from "./scope";
 
 const money = (n: number) => n.toLocaleString("ru-RU");
 const ddmm = (d: Date) => d.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+export const MISSING_REQUISITES = "Укажите ИНН заказчика — без него акт и УПД не формируются (название и адрес банк подставит по ИНН)";
+
 /** Документ уже в ЭДО и не отклонён — перегенерировать нельзя. */
 const inEdo = (c: ClosingDocument) => !!c.sbisDocumentId && !SBIS_FAILED.has(c.sbisStateCode ?? "");
 
@@ -44,6 +46,11 @@ export async function prepareClosingDocs(projectId: string, actorId: string | nu
   const date = new Date();
   const number = String(doc.number);
   const company = p.customer.company;
+  // Без ИНН заказчика акт и УПД не формируются; остальные реквизиты Т-Бизнес подставляет по ИНН
+  if (!company?.inn) {
+    return db.closingDocument.update({ where: { id: doc.id }, data: { amount, error: MISSING_REQUISITES } });
+  }
+  const requisites = [`ИНН ${company.inn}`, company.kpp && `КПП ${company.kpp}`, company.ogrn && `${company.inn.length === 12 ? "ОГРНИП" : "ОГРН"} ${company.ogrn}`, company.legalAddress].filter(Boolean).join(", ");
   const lines = p.contracts.map((c) => ({ title: `Проектные работы «${p.title}» по ${c.parentId ? "спецификации" : "договору"} № ${c.number}`, amount: c.amount }));
   const basis = p.contracts.map((c) => ({ name: c.parentId ? "Спецификация" : "Договор", number: c.number, date: c.signedAt ?? c.createdAt }));
 
@@ -52,7 +59,7 @@ export async function prepareClosingDocs(projectId: string, actorId: string | nu
     ...vars,
     actNumber: number,
     date: ddmm(date),
-    customerInnLine: company?.inn ? `, ИНН ${company.inn}${company.kpp ? `, КПП ${company.kpp}` : ""}` : "",
+    customerInnLine: `, ${requisites}`,
     basis: basis.map((b) => `${b.name} № ${b.number} от ${ddmm(b.date)}`).join("; "),
     rows: lines.map((l, i) => `| ${i + 1} | ${l.title} | 1 | ${money(l.amount)} |`).join("\n"),
   });
@@ -64,7 +71,8 @@ export async function prepareClosingDocs(projectId: string, actorId: string | nu
       const res = await bank.createAct({
         number,
         date: date.toLocaleDateString("sv-SE", { timeZone: "Europe/Moscow" }),
-        buyer: { name: company?.name ?? p.customer.name, inn: company?.inn, kpp: company?.kpp, address: company?.legalAddress },
+        // У банка нет поля ОГРН — дописываем к наименованию заказчика
+        buyer: { name: `${company.name ?? p.customer.name}${company.ogrn ? `, ${company.inn.length === 12 ? "ОГРНИП" : "ОГРН"} ${company.ogrn}` : ""}`, inn: company.inn, kpp: company.kpp, address: company.legalAddress },
         items: lines.map((l) => ({ name: l.title, price: l.amount })),
         footer: `Основание: ${basis.map((b) => `${b.name} № ${b.number} от ${ddmm(b.date)}`).join("; ")}. НДС не облагается.`,
       });
@@ -166,6 +174,15 @@ export async function regenerateClosingDocs(user: SessionUser, projectId: string
   const doc = await prepareClosingDocs(projectId, user.id);
   if (!doc) throw new UserError("По проекту нет подписанных договоров");
   return doc;
+}
+
+/** Реквизиты заказчика из блока «Закрывающие документы» → карточка заказчика, затем акт и УПД собираются заново. */
+export async function saveClosingRequisites(user: SessionUser, projectId: string, input: { inn: string; kpp: string; ogrn: string; address: string }) {
+  const access = await manageAccess(user, projectId);
+  await saveCustomerInn(access.info.customerId, input);
+  const p = await projectData(projectId);
+  if (p.status !== "COMPLETED" || (p.closing && inEdo(p.closing))) return null;
+  return prepareClosingDocs(projectId, user.id);
 }
 
 export async function sendClosingByUser(user: SessionUser, projectId: string, input: { inn: string; kpp: string }) {
