@@ -12,7 +12,6 @@ import { requisitesLine } from "@/services/customers";
 import {
   answerRequestAction,
   assignTeamAction,
-  memberPayAction,
   cancelRequestAction,
   completeProjectAction,
   createRequestAction,
@@ -61,7 +60,11 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
   const [pms, designers] = manage
     ? await Promise.all([
         db.user.findMany({ where: { role: { in: ["PROJECT_MANAGER", "DIRECTOR"] }, status: "ACTIVE" }, select: { id: true, name: true } }),
-        db.user.findMany({ where: { role: "DESIGNER", status: "ACTIVE" }, select: { id: true, name: true, position: true } }),
+        db.user.findMany({
+          where: { role: "DESIGNER", OR: [{ status: { not: "BLOCKED" } }, { memberships: { some: { projectId } } }] },
+          select: { id: true, name: true, position: true, status: true },
+          orderBy: { name: "asc" },
+        }),
       ])
     : [[], []];
   const people = Object.fromEntries((await db.user.findMany({ where: { id: { in: project.timer?.pauses.flatMap((p) => [p.initiatorId, p.resumedById]).filter((x): x is string => !!x) ?? [] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
@@ -244,8 +247,10 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
             ]}
           />
           {manage && (
-            <details className="mt-4 rounded-lg border border-line p-3">
-              <summary className="cursor-pointer text-sm font-medium">Назначить команду</summary>
+            <section className="mt-4 rounded-lg border border-line p-3" aria-labelledby="team-pay">
+              <h3 id="team-pay" className="text-sm font-semibold">
+                Команда и оплата
+              </h3>
               <ActionForm action={assignTeamAction} className="mt-3 space-y-3">
                 <input type="hidden" name="projectId" value={projectId} />
                 <label className="block text-sm">
@@ -260,45 +265,34 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
                   </select>
                 </label>
                 <fieldset>
-                  <legend className="mb-1 text-xs text-muted">Проектировщики</legend>
-                  <div className="grid gap-1 sm:grid-cols-2">
-                    {designers.map((d) => (
-                      <label key={d.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" name="designerIds" value={d.id} defaultChecked={access.info.memberIds.includes(d.id)} />
-                        {d.name}
-                      </label>
-                    ))}
-                  </div>
+                  <legend className="mb-1 text-xs text-muted">Проектировщики — отметьте и укажите оплату</legend>
+                  {/* Сначала назначенные, ниже остальные; у каждого — оплата и аванс, сохраняются вместе с командой */}
+                  <ul className="max-h-96 divide-y divide-line overflow-y-auto rounded-md border border-line">
+                    {[...designers]
+                      .sort((a, b) => Number(access.info.memberIds.includes(b.id)) - Number(access.info.memberIds.includes(a.id)))
+                      .map((d) => {
+                        const m = project.members.find((x) => x.userId === d.id);
+                        return (
+                          <li key={d.id} className="grid items-center gap-2 p-2 sm:grid-cols-[1fr_7.5rem_7.5rem]">
+                            <label className="flex min-h-10 items-center gap-2 text-sm">
+                              <input type="checkbox" name="designerIds" value={d.id} defaultChecked={!!m} className="size-4" />
+                              <span>
+                                {d.name}
+                                {d.status === "INVITED" && <span className="ml-1 text-xs text-muted">· ещё не входил</span>}
+                              </span>
+                            </label>
+                            <input name={`fee_${d.id}`} type="number" min={0} step={1} defaultValue={m?.fee ?? ""} placeholder="Оплата, ₽" aria-label={`Оплата: ${d.name}`} className={fieldClass} />
+                            <input name={`advance_${d.id}`} type="number" min={0} step={1} defaultValue={m?.advance ?? ""} placeholder="Аванс, ₽" aria-label={`Аванс: ${d.name}`} className={fieldClass} />
+                          </li>
+                        );
+                      })}
+                    {designers.length === 0 && <li className="p-3 text-sm text-muted">Проектировщиков нет — директор добавляет их в разделе «Пользователи».</li>}
+                  </ul>
                 </fieldset>
-                <SubmitButton size="sm">Сохранить команду</SubmitButton>
-              </ActionForm>
-            </details>
-          )}
-          {manage && project.members.length > 0 && (
-            <details className="mt-3 rounded-lg border border-line p-3">
-              <summary className="cursor-pointer text-sm font-medium">Оплата проектировщикам</summary>
-              <div className="mt-3 space-y-3">
-                {project.members.map((m) => (
-                  <ActionForm key={m.id} action={memberPayAction} className="grid items-end gap-2 sm:grid-cols-[1fr_8rem_8rem_auto]">
-                    <input type="hidden" name="projectId" value={projectId} />
-                    <input type="hidden" name="userId" value={m.userId} />
-                    <span className="text-sm font-medium">{m.user.name}</span>
-                    <label className="text-sm">
-                      <span className="mb-1 block text-xs text-muted">Оплата, ₽</span>
-                      <input name="fee" type="number" min={0} defaultValue={m.fee ?? ""} className={fieldClass} />
-                    </label>
-                    <label className="text-sm">
-                      <span className="mb-1 block text-xs text-muted">Аванс, ₽</span>
-                      <input name="advance" type="number" min={0} defaultValue={m.advance ?? ""} className={fieldClass} />
-                    </label>
-                    <SubmitButton size="sm" variant="secondary">
-                      Сохранить
-                    </SubmitButton>
-                  </ActionForm>
-                ))}
                 <p className="text-xs text-muted">Оплата попадает в зарплату проектировщика за месяц проекта (по дате подписания договора) и в финансы директора.</p>
-              </div>
-            </details>
+                <SubmitButton size="sm">Сохранить команду и оплату</SubmitButton>
+              </ActionForm>
+            </section>
           )}
         </Card>
         <Card title="Договор">

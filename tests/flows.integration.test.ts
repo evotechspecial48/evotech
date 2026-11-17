@@ -284,8 +284,20 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     await acceptContract(custUser, contract.id, await lastOtp("manual@t.ru"), true, null, null);
     expect((await db.timer.findUniqueOrThrow({ where: { projectId: project.id } })).state).toBe("running");
 
+    // Команда и оплата одним сохранением: приглашённый (ещё не входивший) проектировщик назначается сразу с оплатой
+    const newcomer = await user("newcomer-des@t.ru", "DESIGNER", "Приглашённый Проектировщик");
+    await db.user.update({ where: { id: newcomer.id }, data: { status: "INVITED" } });
+    await expect(assignTeam(director, project.id, pm.id, [designer.id], { [designer.id]: { fee: -1, advance: null } })).rejects.toBeInstanceOf(UserError);
+    await assignTeam(director, project.id, pm.id, [designer.id, newcomer.id], { [designer.id]: { fee: 50000, advance: 10000 }, [newcomer.id]: { fee: 20000, advance: null } });
+    const team = await db.projectMember.findMany({ where: { projectId: project.id }, orderBy: { fee: "desc" } });
+    expect(team.map((m) => [m.userId, m.fee, m.advance])).toEqual([
+      [designer.id, 50000, 10000],
+      [newcomer.id, 20000, null],
+    ]);
+
     // РП завершает проект досрочно: нужен доступ руководителя и основание; таймер останавливается, запросы закрываются
     await assignTeam(director, project.id, pm.id, [designer.id]);
+    expect((await db.projectMember.findFirstOrThrow({ where: { projectId: project.id } })).fee).toBe(50000); // без оплаты в вызове — сумма не стирается
     await createCustomerRequest(pm, project.id, "Пришлите фото", "sketch", true);
     await expect(completeProject(designer, project.id, "Готово")).rejects.toBeInstanceOf(ForbiddenError);
     await expect(completeProject(pm, project.id, "")).rejects.toBeInstanceOf(UserError);

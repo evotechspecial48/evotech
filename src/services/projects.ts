@@ -108,10 +108,20 @@ export async function convertLeadToProject(user: SessionUser, leadId: string, ma
   return project;
 }
 
-export async function assignTeam(user: SessionUser, projectId: string, managerId: string | null, designerIds: string[]) {
+/** Оплата проектировщиков по проекту, ₽: null — не указана. */
+export type MemberPay = Record<string, { fee: number | null; advance: number | null }>;
+
+/** Команда проекта и (необязательно) оплата проектировщиков — одним сохранением. */
+export async function assignTeam(user: SessionUser, projectId: string, managerId: string | null, designerIds: string[], pay?: MemberPay) {
   const access = await loadProjectAccess(user, projectId);
   if (!access.canManage) throw new ForbiddenError("Назначать участников может руководитель проекта или директор");
-  const designers = await db.user.findMany({ where: { id: { in: designerIds }, role: "DESIGNER", status: "ACTIVE" }, select: { id: true } });
+  for (const v of Object.values(pay ?? {})) for (const n of [v.fee, v.advance]) if (n !== null && (!Number.isFinite(n) || n < 0 || n > 1e9)) throw new UserError("Сумма — целое число от 0");
+  const amount = (n: number | null) => (n === null ? null : Math.round(n));
+  // Приглашённые (ещё не входившие в кабинет) тоже назначаются; заблокированный остаётся, только если уже в команде
+  const designers = await db.user.findMany({
+    where: { id: { in: designerIds }, role: "DESIGNER", OR: [{ status: { not: "BLOCKED" } }, { id: { in: access.info.memberIds } }] },
+    select: { id: true },
+  });
   if (managerId) {
     const m = await db.user.findFirst({ where: { id: managerId, role: { in: ["PROJECT_MANAGER", "DIRECTOR"] } } });
     if (!m) throw new UserError("Руководитель проекта не найден");
@@ -121,10 +131,13 @@ export async function assignTeam(user: SessionUser, projectId: string, managerId
   await db.$transaction([
     db.project.update({ where: { id: projectId }, data: { managerId } }),
     db.projectMember.deleteMany({ where: { projectId, userId: { notIn: after } } }),
-    ...after.filter((id) => !before.includes(id)).map((userId) => db.projectMember.create({ data: { projectId, userId } })),
+    ...after.filter((id) => !before.includes(id)).map((userId) => db.projectMember.create({ data: { projectId, userId, ...(pay?.[userId] ? { fee: amount(pay[userId].fee), advance: amount(pay[userId].advance) } : {}) } })),
+    ...after
+      .filter((id) => before.includes(id) && pay?.[id])
+      .map((userId) => db.projectMember.update({ where: { projectId_userId: { projectId, userId } }, data: { fee: amount(pay![userId].fee), advance: amount(pay![userId].advance) } })),
     db.projectStage.updateMany({ where: { projectId, assigneeId: { notIn: after } }, data: { assigneeId: null } }),
   ]);
-  await audit({ actorId: user.id, action: "project.assign", entityType: "Project", entityId: projectId, projectId, meta: { managerId, designers: after } });
+  await audit({ actorId: user.id, action: "project.assign", entityType: "Project", entityId: projectId, projectId, meta: { managerId, designers: after, ...(pay ? { pay: Object.fromEntries(after.filter((id) => pay[id]).map((id) => [id, pay[id]])) } : {}) } });
   const added = after.filter((id) => !before.includes(id));
   const p = access.project;
   await notify(added, "project.assigned", `Вы назначены на проект №${p.number}`, `«${p.title}»`, `/cabinet/projects/${projectId}`);

@@ -230,16 +230,11 @@ export async function uploadVersionAction(_: ActionState, fd: FormData): Promise
 export async function assignTeamAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const user = await actor("projects.assign");
-    await projects.assignTeam(user, str(fd, "projectId"), str(fd, "managerId") || null, fd.getAll("designerIds").map(String));
-    return { ok: true, message: "Команда проекта обновлена" };
-  });
-}
-
-export async function memberPayAction(_: ActionState, fd: FormData): Promise<ActionState> {
-  return runAction(async () => {
-    const user = await actor("projects.manage");
-    await projects.setMemberPay(user, str(fd, "projectId"), str(fd, "userId"), num(fd, "fee"), num(fd, "advance"));
-    return { ok: true, message: "Оплата сохранена" };
+    const designerIds = fd.getAll("designerIds").map(String);
+    // Оплата и аванс — поля fee_<id> и advance_<id> в той же форме (пусто — не указано)
+    const pay = Object.fromEntries(designerIds.map((id) => [id, { fee: num(fd, `fee_${id}`), advance: num(fd, `advance_${id}`) }]));
+    await projects.assignTeam(user, str(fd, "projectId"), str(fd, "managerId") || null, designerIds, pay);
+    return { ok: true, message: "Команда и оплата сохранены" };
   });
 }
 
