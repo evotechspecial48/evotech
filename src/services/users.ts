@@ -215,8 +215,8 @@ export async function updateUser(actor: SessionUser, userId: string, data: { nam
   });
 }
 
-/** Выдуманные адреса импорта из таблицы учёта (designer-…@evotech.local) — на них письма не уходят. */
-export const isPlaceholderEmail = (email: string) => /@evotech\.local$/i.test(email);
+/** Выдуманные адреса импорта из таблицы учёта (designer-…@evotech.local, client-…@import.local) — на них письма не уходят. */
+export const isPlaceholderEmail = (email: string) => /@(evotech|import)\.local$/i.test(email);
 
 /** Повторное приглашение сотрудника или заказчика, ещё не задавшего пароль: письмо со ссылкой на текущую почту записи. */
 export async function resendInvite(actor: SessionUser, userId: string) {
@@ -224,7 +224,7 @@ export async function resendInvite(actor: SessionUser, userId: string) {
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) throw new NotFoundError("Пользователь");
   if (user.status !== "INVITED") throw new UserError("Пользователь уже задал пароль — для входа он использует «Забыли пароль?»");
-  if (isPlaceholderEmail(user.email)) throw new UserError("Сначала укажите настоящую почту пользователя (кнопка «Изменить» → поле почты)");
+  if (isPlaceholderEmail(user.email)) throw new UserError("Сначала укажите настоящую почту в поле «Почта (логин)» и сохраните");
   return inviteUser(actor, { email: user.email, name: user.name, role: user.role });
 }
 
