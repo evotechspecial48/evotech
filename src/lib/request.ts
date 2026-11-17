@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { env } from "./env";
 
 export async function clientInfo(): Promise<{ ip: string | null; userAgent: string | null }> {
   const h = await headers();
@@ -16,4 +17,12 @@ export function sameOrigin(req: Request): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Абсолютный адрес для редиректа из API-маршрута. Не от req.url: за Caddy внутри контейнера это
+ * http://0.0.0.0:3000, и браузер уходил на недоступный https://0.0.0.0:3000/… («Страница недоступна»).
+ */
+export function appUrl(path: string): URL {
+  return new URL(path, env.APP_URL);
 }

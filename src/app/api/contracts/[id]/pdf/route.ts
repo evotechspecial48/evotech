@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { appUrl } from "@/lib/request";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { textToPdf } from "@/lib/pdf";
@@ -8,13 +9,13 @@ import { can } from "@/domain/rbac";
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getSessionUser();
-  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  if (!user) return NextResponse.redirect(appUrl("/login"));
   const contract = await db.contract.findUnique({ where: { id }, include: { versions: { orderBy: { version: "desc" } }, acceptances: { include: { version: true } } } });
   if (!contract) return new Response("Не найден", { status: 404 });
   const allowed = contract.customerId === user.id || can(user.role, "contracts.manage") || (can(user.role, "projects.view_all") && !!contract.projectId);
   if (!allowed) return new Response("Нет доступа", { status: 403 });
   // Готовый договор, загруженный файлом, — сам файл (если редакцию не меняли текстом)
-  if (contract.fileId && contract.versions.length === 1) return NextResponse.redirect(new URL(`/api/files/${contract.fileId}/link`, req.url));
+  if (contract.fileId && contract.versions.length === 1) return NextResponse.redirect(appUrl(`/api/files/${contract.fileId}/link`));
   const vParam = Number(new URL(req.url).searchParams.get("v"));
   const version = contract.versions.find((v) => v.version === vParam) ?? contract.versions[0];
   const acc = contract.acceptances.find((a) => a.versionId === version.id);

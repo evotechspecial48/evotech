@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import { appUrl } from "@/lib/request";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -21,13 +22,13 @@ const money = (n: number) => n.toLocaleString("ru-RU");
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getSessionUser();
-  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  if (!user) return NextResponse.redirect(appUrl("/login"));
   const offer = await db.commercialOffer.findUnique({ where: { id }, include: { lead: true } });
   if (!offer) return new Response("Не найдено", { status: 404 });
   const allowed = can(user.role, "offers.manage") || (user.role === "CUSTOMER" && offer.lead.customerId === user.id && offer.status !== "DRAFT");
   if (!allowed) return new Response("Нет доступа", { status: 403 });
   // Готовое КП, загруженное файлом, отдаётся как есть (права на файл проверяет /api/files)
-  if (offer.fileId) return NextResponse.redirect(new URL(`/api/files/${offer.fileId}/link`, req.url));
+  if (offer.fileId) return NextResponse.redirect(appUrl(`/api/files/${offer.fileId}/link`));
   const r = await companyRequisites();
   const date = offer.createdAt.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
 

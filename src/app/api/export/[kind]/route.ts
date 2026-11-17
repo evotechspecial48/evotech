@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { appUrl } from "@/lib/request";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { audit } from "@/lib/audit";
@@ -14,7 +15,7 @@ const csv = (rows: (string | number | null | undefined)[][]) =>
 export async function GET(req: Request, { params }: { params: Promise<{ kind: string }> }) {
   const { kind } = await params;
   const user = await getSessionUser();
-  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  if (!user) return NextResponse.redirect(appUrl("/login"));
 
   if (kind === "me") {
     const data = await exportPersonalData(user, user.id);
