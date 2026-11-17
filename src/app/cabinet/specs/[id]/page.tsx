@@ -68,7 +68,7 @@ export default async function SpecPage({ params, searchParams }: { params: Promi
             {groups.map((g) => (
               <Card key={g} title={g}>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {SPEC_FIELDS.filter((f) => f.group === g).map((f) => (
+                  {SPEC_FIELDS.filter((f) => f.group === g && !(user.role === "DESIGNER" && f.key === "budget")).map((f) => (
                     <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : ""}>
                       <label htmlFor={f.key} className="mb-1 block text-sm font-medium text-ink-soft">
                         {f.label}

@@ -5,6 +5,7 @@ import { orNotFound } from "@/lib/page";
 import { PROJECT_STATUS, SPEC_STATUS } from "@/domain/labels";
 import { projectProgress, type StageCodeT, type StageStatusT } from "@/domain/stage";
 import { loadProjectAccess } from "@/services/scope";
+import { COMMERCIAL_FILE_WHERE } from "@/domain/files";
 import { Alert, PageHeader, Progress, StatusBadge, Tabs } from "@/components/ui";
 import { CommentsTab, FilesTab, HistoryTab, OverviewTab, RequestsTab, StagesTab, VariantsTab } from "./tabs";
 
@@ -31,7 +32,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const [openRequests, comments, files] = await Promise.all([
     db.customerRequest.count({ where: { projectId: id, status: "OPEN" } }),
     db.comment.count({ where: { projectId: id, ...(user.role === "CUSTOMER" ? { internal: false } : {}) } }),
-    db.fileAsset.count({ where: { projectId: id, deletedAt: null, ...(user.role === "CUSTOMER" ? { internal: false } : {}) } }),
+    db.fileAsset.count({ where: { projectId: id, deletedAt: null, ...(user.role === "CUSTOMER" ? { internal: false } : {}), ...(user.role === "DESIGNER" ? { NOT: COMMERCIAL_FILE_WHERE } : {}) } }),
   ]);
   const progress = projectProgress(project.stages.map((s) => ({ code: s.code as StageCodeT, status: s.status as StageStatusT })));
   const ctx = { user, access, projectId: id };

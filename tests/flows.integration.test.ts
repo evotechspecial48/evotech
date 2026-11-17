@@ -19,7 +19,7 @@ import { buildUpdXml, toCp1251 } from "@/lib/edo/upd";
 import { monthRange } from "@/domain/months";
 import { loadProjectAccess } from "@/services/scope";
 import { stageAction, uploadVersion, verifyVersionIntegrity } from "@/services/stages";
-import { checkLeadFiles, saveGenerated, saveLeadFiles } from "@/services/files";
+import { assertCanDownload, checkLeadFiles, saveGenerated, saveLeadFiles } from "@/services/files";
 import { createQuickOrder, selectVariant, archiveAccess } from "@/services/quick-orders";
 import { createQuickOrderPayment, handlePaymentNotification, simulateMockBank } from "@/services/payments";
 import { processJob } from "@/services/ai-jobs";
@@ -318,6 +318,9 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     expect(updAsset.originalName).toMatch(/^ON_NSCHFDOPPR_.*.xml$/);
     expect(updAsset.projectId).toBe(project.id);
     await expect(regenerateClosingDocs(designer, project.id)).rejects.toBeInstanceOf(ForbiddenError);
+    // Проектировщик проекта не скачивает акт и УПД даже по прямой ссылке; руководитель — скачивает
+    await expect(assertCanDownload(designer, updAsset)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(assertCanDownload(pm, updAsset)).resolves.toBeUndefined();
   });
 
   it("акт и УПД: XML в windows-1251, отправка пакетом «Документ отгрузки» в СБИС, подписание заказчиком", async () => {

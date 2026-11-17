@@ -115,3 +115,14 @@ describe("лист «Проекты»: финансовые годы июнь–
     expect(m[12]).toMatchObject({ month: "2022-06", revenue: 7 }); // повторная подпись года — следующий блок
   });
 });
+
+describe("проектировщику не видны договорные и финансовые файлы", async () => {
+  const { isCommercialFile } = await import("@/domain/files");
+  it("договор и документы вне этапа — скрыты; результаты этапов и исходные данные — видны", () => {
+    expect(isCommercialFile({ category: "CONTRACT", stageCode: null, stageVersionId: null })).toBe(true);
+    expect(isCommercialFile({ category: "DOCUMENT", stageCode: null, stageVersionId: null })).toBe(true); // счёт, акт, УПД, КП
+    expect(isCommercialFile({ category: "DOCUMENT", stageCode: "delivery", stageVersionId: "v1" })).toBe(false); // выдача документации
+    expect(isCommercialFile({ category: "TZ", stageCode: null, stageVersionId: null })).toBe(false);
+    expect(isCommercialFile({ category: "DRAWING", stageCode: null, stageVersionId: null })).toBe(false);
+  });
+});

@@ -8,6 +8,7 @@ import { leadScope, projectScope, quickOrderScope } from "@/services/scope";
 import { CUSTOMER_VISIBLE_VERSION } from "@/services/stages";
 import { FileList } from "@/components/cabinet/shared";
 import { btnClass, Card, fieldClass, PageHeader } from "@/components/ui";
+import { COMMERCIAL_FILE_WHERE } from "@/domain/files";
 
 export default async function FilesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireUser("files.download");
@@ -20,7 +21,11 @@ export default async function FilesPage({ searchParams }: { searchParams: Promis
     category: category in FILE_CATEGORY ? (category as FileCategory) : { not: "ARCHIVE" },
     ...(q ? { originalName: { contains: q, mode: "insensitive" } } : {}),
     OR: [
-      { project: projectScope(user), ...(isCustomer ? { internal: false, OR: [{ stageVersionId: null }, { stageVersion: CUSTOMER_VISIBLE_VERSION }] } : {}) },
+      {
+        project: projectScope(user),
+        ...(isCustomer ? { internal: false, OR: [{ stageVersionId: null }, { stageVersion: CUSTOMER_VISIBLE_VERSION }] } : {}),
+        ...(user.role === "DESIGNER" ? { NOT: COMMERCIAL_FILE_WHERE } : {}),
+      },
       ...(user.role === "DESIGNER" ? [] : [{ lead: leadScope(user), projectId: null, ...(isCustomer ? { internal: false } : {}) }]),
       ...(user.role === "DESIGNER" ? [] : [{ quickOrder: quickOrderScope(user) }]),
     ],

@@ -7,7 +7,7 @@ import { sha256, signPayload } from "@/lib/crypto";
 import { scanner, storage } from "@/lib/storage";
 import { UserError, NotFoundError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/auth";
-import { checkUpload, LEAD_FORM_FILES, safeFileName } from "@/domain/files";
+import { checkUpload, isCommercialFile, LEAD_FORM_FILES, safeFileName } from "@/domain/files";
 import { can, ForbiddenError } from "@/domain/rbac";
 import { loadLeadAccess, loadProjectAccess } from "./scope";
 import { CUSTOMER_VISIBLE_VERSION } from "./stages";
@@ -183,6 +183,7 @@ export async function assertCanDownload(user: SessionUser, file: FileAsset): Pro
   if (file.scanStatus === "INFECTED") throw new ForbiddenError("Файл заблокирован антивирусной проверкой");
   if (!can(user.role, "files.download")) throw new ForbiddenError();
   if (file.internal && user.role === "CUSTOMER") throw new ForbiddenError();
+  if (user.role === "DESIGNER" && isCommercialFile(file)) throw new ForbiddenError("Договорные и финансовые документы проектировщику недоступны");
   if (file.category === "ARCHIVE" && file.quickOrderId) throw new ForbiddenError("Итоговый архив скачивается со страницы заказа");
   if (file.projectId) {
     await loadProjectAccess(user, file.projectId);

@@ -46,6 +46,16 @@ export function checkUpload(name: string, size: number, maxSizeMb = DEFAULT_MAX_
 /** Вложения публичной формы заявки: до 10 файлов, всего до 100 МБ. */
 export const LEAD_FORM_FILES = { max: 10, totalMb: 100, accept: ".pdf,.dwg,.dxf,.ifc,.xlsx,.docx,.zip,.rar,.7z,.jpg,.jpeg,.png,.heic,.heif,.webp,.step,.stp" };
 
+/**
+ * Договорные и финансовые документы проекта — договоры, счета, акты и УПД, КП, подписанное в ЭДО:
+ * категория «Договор» или «Документы» вне этапа. Проектировщику не показываются и не скачиваются.
+ * Результаты этапов («Документы» с этапом или версией) — техническая документация, видны всей команде.
+ */
+export function isCommercialFile(f: { category: string; stageCode: string | null; stageVersionId: string | null }): boolean {
+  return f.category === "CONTRACT" || (f.category === "DOCUMENT" && !f.stageCode && !f.stageVersionId);
+}
+export const COMMERCIAL_FILE_WHERE = { OR: [{ category: "CONTRACT" as const }, { category: "DOCUMENT" as const, stageCode: null, stageVersionId: null }] };
+
 /** Безопасное имя для заголовка Content-Disposition и хранения. */
 export function safeFileName(name: string): string {
   const cleaned = name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/\s+/g, " ").trim();

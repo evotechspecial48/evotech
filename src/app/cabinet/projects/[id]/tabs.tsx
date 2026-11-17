@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { AUDIT_LABELS } from "@/lib/audit";
 import { can } from "@/domain/rbac";
 import { AI_JOB_STATUS, CONTRACT_STATUS, REQUEST_STATUS, STAGE_STATUS, VERSION_STATUS } from "@/domain/labels";
+import { COMMERCIAL_FILE_WHERE } from "@/domain/files";
 import { availableActions, STAGES, type StageStatusT } from "@/domain/stage";
 import { formatDuration } from "@/domain/timer";
 import type { loadProjectAccess } from "@/services/scope";
@@ -57,6 +58,9 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
   const closingDoc = project.closing;
   const closingInEdo = !!closingDoc?.sbisDocumentId && !SBIS_FAILED.has(closingDoc.sbisStateCode ?? "");
   const manage = access.canManage;
+  // Проектировщик видит только своё: оплату, срок, ТЗ и техническую документацию — без договоров, сумм и реквизитов
+  const designer = user.role === "DESIGNER";
+  const own = designer ? project.members.find((m) => m.userId === user.id) : undefined;
   const [pms, designers] = manage
     ? await Promise.all([
         db.user.findMany({ where: { role: { in: ["PROJECT_MANAGER", "DIRECTOR"] }, status: "ACTIVE" }, select: { id: true, name: true } }),
@@ -67,7 +71,11 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
         }),
       ])
     : [[], []];
-  const people = Object.fromEntries((await db.user.findMany({ where: { id: { in: project.timer?.pauses.flatMap((p) => [p.initiatorId, p.resumedById]).filter((x): x is string => !!x) ?? [] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
+  const people = Object.fromEntries(
+    (
+      await db.user.findMany({ where: { id: { in: project.timer?.pauses.flatMap((p) => [p.initiatorId, p.resumedById]).filter((x): x is string => !!x) ?? [] } }, select: { id: true, name: true } })
+    ).map((u) => [u.id, u.name]),
+  );
   const timer = project.timer;
   const manualOpen = timer?.pauses.some((p) => !p.endedAt && p.kind === "MANUAL");
 
@@ -166,7 +174,7 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
         </Card>
       </div>
       <div className="space-y-6">
-        {(project.status === "COMPLETED" || closingDoc) && (
+        {!designer && (project.status === "COMPLETED" || closingDoc) && (
           <Card title="Закрывающие документы">
             {!closingDoc ? (
               <div className="space-y-3 text-sm">
@@ -201,7 +209,12 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
                     </a>
                   )}
                 </div>
-                {closingDoc.sbisDocumentId && <p className="text-muted">ЭДО СБИС: {closingDoc.sbisStateName ?? "отправлено"}{closingDoc.sbisSentAt && ` · загружено ${fmtDateTime(closingDoc.sbisSentAt)}`}</p>}
+                {closingDoc.sbisDocumentId && (
+                  <p className="text-muted">
+                    ЭДО СБИС: {closingDoc.sbisStateName ?? "отправлено"}
+                    {closingDoc.sbisSentAt && ` · загружено ${fmtDateTime(closingDoc.sbisSentAt)}`}
+                  </p>
+                )}
                 {manage && closingDoc.error && <Alert tone="warning">{closingDoc.error}</Alert>}
                 {manage && !closingInEdo && (
                   <div className="space-y-3 border-t border-line pt-3">
@@ -236,10 +249,18 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
             items={[
               ["Заказчик", `${project.customer.name}${project.customer.company ? `, ${project.customer.company.name}` : ""}`],
               // Реквизиты заказчика — для сотрудников
-              ...(user.role !== "CUSTOMER" && requisitesLine(project.customer.company) ? ([["Реквизиты заказчика", requisitesLine(project.customer.company)], ["Контакты заказчика", [project.customer.email, project.customer.phone].filter(Boolean).join(", ")]] as [string, string][]) : []),
+              ...(user.role !== "CUSTOMER" && !designer && requisitesLine(project.customer.company)
+                ? ([
+                    ["Реквизиты заказчика", requisitesLine(project.customer.company)],
+                    ["Контакты заказчика", [project.customer.email, project.customer.phone].filter(Boolean).join(", ")],
+                  ] as [string, string][])
+                : []),
               ["Руководитель проекта", project.manager?.name ?? "не назначен"],
               ["Менеджер проектов", project.salesManager?.name],
               ["Проектировщики", project.members.map((m) => m.user.name).join(", ") || "не назначены"],
+              ...(own
+                ? ([["Ваша оплата", own.fee ? `${rub(own.fee)}${own.advance ? `, аванс ${rub(own.advance)}` : ""}` : "не указана — уточните у руководителя проекта"]] as [string, string][])
+                : []),
               // Оплата исполнителей — только для руководителя проекта и директора
               ...(manage && project.members.some((m) => m.fee || m.advance)
                 ? ([["Оплата исполнителям", project.members.map((m) => `${m.user.name}: ${rub(m.fee)}${m.advance ? `, аванс ${rub(m.advance)}` : ""}`).join("; ")]] as [string, string][])
@@ -282,7 +303,16 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
                               </span>
                             </label>
                             <input name={`fee_${d.id}`} type="number" min={0} step={1} defaultValue={m?.fee ?? ""} placeholder="Оплата, ₽" aria-label={`Оплата: ${d.name}`} className={fieldClass} />
-                            <input name={`advance_${d.id}`} type="number" min={0} step={1} defaultValue={m?.advance ?? ""} placeholder="Аванс, ₽" aria-label={`Аванс: ${d.name}`} className={fieldClass} />
+                            <input
+                              name={`advance_${d.id}`}
+                              type="number"
+                              min={0}
+                              step={1}
+                              defaultValue={m?.advance ?? ""}
+                              placeholder="Аванс, ₽"
+                              aria-label={`Аванс: ${d.name}`}
+                              className={fieldClass}
+                            />
                           </li>
                         );
                       })}
@@ -295,25 +325,27 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
             </section>
           )}
         </Card>
-        <Card title="Договор">
-          {project.contracts.length === 0 ? (
-            <p className="text-sm text-muted">Договор не привязан.</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {project.contracts.map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
-                  <Link href={`/cabinet/contracts/${c.id}`} className="text-accent-700 hover:underline">
-                    {c.number} · {rub(c.amount)} · {c.termDays} дн. · оплачено {rub(c.payments.reduce((s, p) => s + p.amount, 0) / 100)}
-                  </Link>
-                  <span className="flex items-center gap-2">
-                    <StatusBadge map={CONTRACT_STATUS} value={c.status} />
-                    {c.signedAt && <span className="text-xs text-muted">подписан {fmtDate(c.signedAt)}</span>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        {!designer && (
+          <Card title="Договор">
+            {project.contracts.length === 0 ? (
+              <p className="text-sm text-muted">Договор не привязан.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {project.contracts.map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <Link href={`/cabinet/contracts/${c.id}`} className="text-accent-700 hover:underline">
+                      {c.number} · {rub(c.amount)} · {c.termDays} дн. · оплачено {rub(c.payments.reduce((s, p) => s + p.amount, 0) / 100)}
+                    </Link>
+                    <span className="flex items-center gap-2">
+                      <StatusBadge map={CONTRACT_STATUS} value={c.status} />
+                      {c.signedAt && <span className="text-xs text-muted">подписан {fmtDate(c.signedAt)}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        )}
         {manage && (
           <Card title="Статус проекта">
             <ActionForm action={projectStatusAction} className="flex flex-wrap items-end gap-2">
@@ -333,7 +365,12 @@ export async function OverviewTab({ user, access, projectId }: Ctx) {
                 <input type="hidden" name="projectId" value={projectId} />
                 <p className="w-full text-sm text-muted">Завершить проект на текущей стадии: таймер остановится, открытые запросы заказчику закроются. Незавершённые этапы останутся в истории.</p>
                 <input name="comment" required minLength={3} placeholder="Основание завершения" className={`${fieldClass} sm:max-w-xs`} aria-label="Основание завершения" />
-                <ConfirmSubmit title="Завершить проект?" text="Проект получит статус «Завершён», таймер остановится. При необходимости проект можно вернуть в работу." confirmText="Завершить" variant="primary">
+                <ConfirmSubmit
+                  title="Завершить проект?"
+                  text="Проект получит статус «Завершён», таймер остановится. При необходимости проект можно вернуть в работу."
+                  confirmText="Завершить"
+                  variant="primary"
+                >
                   Завершить проект
                 </ConfirmSubmit>
               </ActionForm>
@@ -363,10 +400,14 @@ export async function StagesTab({ user, access, projectId }: Ctx) {
     },
   });
   const names = Object.fromEntries(
-    (await db.user.findMany({ where: { id: { in: stages.flatMap((s) => s.versions.flatMap((v) => [v.createdById, ...v.approvals.map((a) => a.userId)])) } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]),
+    (await db.user.findMany({ where: { id: { in: stages.flatMap((s) => s.versions.flatMap((v) => [v.createdById, ...v.approvals.map((a) => a.userId)])) } }, select: { id: true, name: true } })).map(
+      (u) => [u.id, u.name],
+    ),
   );
   const spec = await db.technicalSpecification.findUnique({ where: { projectId }, select: { id: true } });
-  const integrity = Object.fromEntries(await Promise.all(stages.flatMap((s) => s.versions.filter((v) => v.lockedAt && v.checksum !== "seed").map(async (v) => [v.id, await verifyVersionIntegrity(v.id)] as const))));
+  const integrity = Object.fromEntries(
+    await Promise.all(stages.flatMap((s) => s.versions.filter((v) => v.lockedAt && v.checksum !== "seed").map(async (v) => [v.id, await verifyVersionIntegrity(v.id)] as const))),
+  );
   const actor = access.actorKind;
   return (
     <ol className="space-y-5">
@@ -433,7 +474,15 @@ export async function StagesTab({ user, access, projectId }: Ctx) {
                                   <li key={a.id}>
                                     <span className="text-muted">{fmtDateTime(a.createdAt)}</span> · {names[a.userId]} ·{" "}
                                     <span className={a.decision === "CHANGES_REQUESTED" ? "text-danger-700" : a.decision === "APPROVED" ? "text-success-700" : ""}>
-                                      {a.kind === "INTERNAL" ? (a.decision === "SUBMITTED" ? "отправлено на внутреннюю проверку" : a.decision === "APPROVED" ? "внутренняя проверка пройдена" : "возвращено на доработку") : a.decision === "APPROVED" ? "согласовано заказчиком" : "замечания заказчика"}
+                                      {a.kind === "INTERNAL"
+                                        ? a.decision === "SUBMITTED"
+                                          ? "отправлено на внутреннюю проверку"
+                                          : a.decision === "APPROVED"
+                                            ? "внутренняя проверка пройдена"
+                                            : "возвращено на доработку"
+                                        : a.decision === "APPROVED"
+                                          ? "согласовано заказчиком"
+                                          : "замечания заказчика"}
                                     </span>
                                     {a.comment && <span>: «{a.comment}»</span>}
                                   </li>
@@ -462,7 +511,12 @@ export async function StagesTab({ user, access, projectId }: Ctx) {
 
 export async function RequestsTab({ user, access, projectId }: Ctx) {
   const requests = await db.customerRequest.findMany({ where: { projectId }, orderBy: [{ status: "asc" }, { createdAt: "desc" }] });
-  const names = Object.fromEntries((await db.user.findMany({ where: { id: { in: requests.flatMap((r) => [r.authorId, r.answeredById]).filter((x): x is string => !!x) } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
+  const names = Object.fromEntries(
+    (await db.user.findMany({ where: { id: { in: requests.flatMap((r) => [r.authorId, r.answeredById]).filter((x): x is string => !!x) } }, select: { id: true, name: true } })).map((u) => [
+      u.id,
+      u.name,
+    ]),
+  );
   const isCustomer = user.role === "CUSTOMER";
   return (
     <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
@@ -542,7 +596,10 @@ export async function CommentsTab({ user, access, projectId }: Ctx) {
     include: { author: { select: { name: true, role: true } } },
     orderBy: { createdAt: "asc" },
   });
-  const participants = await db.user.findMany({ where: { id: { in: [access.info.customerId, access.info.managerId, ...access.info.memberIds].filter((x): x is string => !!x) } }, select: { name: true } });
+  const participants = await db.user.findMany({
+    where: { id: { in: [access.info.customerId, access.info.managerId, ...access.info.memberIds].filter((x): x is string => !!x) } },
+    select: { name: true },
+  });
   return (
     <Card title="Обсуждение проекта">
       <CommentList comments={comments} />
@@ -572,17 +629,27 @@ export async function CommentsTab({ user, access, projectId }: Ctx) {
 
 export async function FilesTab({ user, access, projectId }: Ctx) {
   const files = await db.fileAsset.findMany({
-    where: { projectId, deletedAt: null, ...(user.role === "CUSTOMER" ? { internal: false, OR: [{ stageVersionId: null }, { stageVersion: CUSTOMER_VISIBLE_VERSION }] } : {}) },
+    where: {
+      projectId,
+      deletedAt: null,
+      ...(user.role === "CUSTOMER" ? { internal: false, OR: [{ stageVersionId: null }, { stageVersion: CUSTOMER_VISIBLE_VERSION }] } : {}),
+      ...(user.role === "DESIGNER" ? { NOT: COMMERCIAL_FILE_WHERE } : {}),
+    },
     include: { stageVersion: { select: { version: true, lockedAt: true } } },
     orderBy: { createdAt: "desc" },
   });
-  const uploaders = Object.fromEntries((await db.user.findMany({ where: { id: { in: files.map((f) => f.uploadedById).filter((x): x is string => !!x) } }, select: { id: true, name: true } })).map((u) => [u.id, u]));
+  const uploaders = Object.fromEntries(
+    (await db.user.findMany({ where: { id: { in: files.map((f) => f.uploadedById).filter((x): x is string => !!x) } }, select: { id: true, name: true } })).map((u) => [u.id, u]),
+  );
   const required = ["sketch", "model", "drawings", "documentation"];
   const stagesWithFiles = new Set(files.filter((f) => f.stageVersionId).map((f) => f.stageCode));
   return (
     <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]">
       <Card title={`Файлы проекта (${files.length})`}>
-        <FileList files={files.map((f) => ({ ...f, uploadedBy: f.uploadedById ? uploaders[f.uploadedById] : null }))} canDelete={(f) => !f.stageVersionId && (f.uploadedById === user.id || access.canManage)} />
+        <FileList
+          files={files.map((f) => ({ ...f, uploadedBy: f.uploadedById ? uploaders[f.uploadedById] : null }))}
+          canDelete={(f) => !f.stageVersionId && (f.uploadedById === user.id || access.canManage)}
+        />
         <div className="mt-4">
           <FileUploader
             target={{ projectId }}
@@ -591,7 +658,10 @@ export async function FilesTab({ user, access, projectId }: Ctx) {
               { value: "SOURCE", label: "Исходные данные" },
               { value: "PHOTO", label: "Фотографии" },
               { value: "DRAWING", label: "Чертежи" },
-              { value: "DOCUMENT", label: "Документы" },
+              { value: "MODEL", label: "3D-модель" },
+              { value: "SPECIFICATION", label: "Спецификации и ведомости" },
+              // Договорные и финансовые документы проектировщику не видны — ему эту категорию не предлагаем
+              ...(user.role === "DESIGNER" ? [] : [{ value: "DOCUMENT", label: "Документы: договорные и финансовые" }]),
               { value: "OTHER", label: "Прочее" },
             ]}
           />
@@ -677,17 +747,29 @@ export async function VariantsTab({ user, access, projectId }: Ctx) {
 
 // ---------- Лента событий ----------
 
+const DESIGNER_EVENTS = ["stage.", "file.", "request.", "timer.", "spec.", "project.assign", "project.complete", "project.create"];
+
 export async function HistoryTab({ user, projectId }: Ctx) {
   const [changes, events] = await Promise.all([
     db.statusChange.findMany({ where: { projectId }, orderBy: { createdAt: "desc" }, take: 100 }),
-    user.role === "CUSTOMER" ? Promise.resolve([]) : db.auditEvent.findMany({ where: { projectId }, orderBy: { createdAt: "desc" }, take: 100 }),
+    user.role === "CUSTOMER"
+      ? Promise.resolve([])
+      : db.auditEvent.findMany({
+          // Проектировщику — только рабочие события: без договоров, счетов, оплаты исполнителей и заявки
+          where: { projectId, ...(user.role === "DESIGNER" ? { OR: DESIGNER_EVENTS.map((a) => ({ action: { startsWith: a } })) } : {}) },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
   ]);
   const ids = [...changes.map((c) => c.actorId), ...events.map((e) => e.actorId)].filter((x): x is string => !!x);
   const names = Object.fromEntries((await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
   return (
     <div className="grid gap-6 xl:grid-cols-2">
       <Card title="Изменения статусов">
-        <History items={changes.map((c) => ({ ...c, actorName: c.actorId ? names[c.actorId] : null }))} labels={{ ...STAGE_STATUS, ACTIVE: { label: "В работе" }, ON_HOLD: { label: "Приостановлен" }, CANCELLED: { label: "Отменён" }, COMPLETED: { label: "Завершён" } }} />
+        <History
+          items={changes.map((c) => ({ ...c, actorName: c.actorId ? names[c.actorId] : null }))}
+          labels={{ ...STAGE_STATUS, ACTIVE: { label: "В работе" }, ON_HOLD: { label: "Приостановлен" }, CANCELLED: { label: "Отменён" }, COMPLETED: { label: "Завершён" } }}
+        />
       </Card>
       {user.role !== "CUSTOMER" && (
         <Card title="Журнал действий по проекту">
@@ -706,9 +788,11 @@ export async function HistoryTab({ user, projectId }: Ctx) {
               ))}
             </ul>
           )}
-          <Link href={`/cabinet/audit?project=${projectId}`} className={`${btnClass("ghost", "sm")} mt-3`}>
-            Подробнее в журнале
-          </Link>
+          {can(user.role, "audit.view") && (
+            <Link href={`/cabinet/audit?project=${projectId}`} className={`${btnClass("ghost", "sm")} mt-3`}>
+              Подробнее в журнале
+            </Link>
+          )}
         </Card>
       )}
     </div>
