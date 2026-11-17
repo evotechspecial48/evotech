@@ -56,7 +56,9 @@ export function ActionForm({
   return (
     <FormCtx.Provider value={state}>
       <PendingCtx.Provider value={pending}>
-        <form ref={formRef} onSubmit={onSubmit} className={className} id={id} noValidate aria-busy={pending}>
+        {/* action — отправка до загрузки скриптов (медленная сеть, тяжёлая страница): POST прямо в серверное действие,
+            а не «пустой» GET, который терял данные. После загрузки работает onSubmit (preventDefault отключает action). */}
+        <form ref={formRef} action={formAction} onSubmit={onSubmit} className={className} id={id} noValidate aria-busy={pending}>
           {children}
           <FormMessage successMessage={successMessage} />
         </form>
