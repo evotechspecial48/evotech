@@ -35,7 +35,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       where,
       include: {
         customer: { select: { name: true } },
-        manager: { select: { name: true } },
+        // Руководитель у всех проектов один — в списке показываются проектировщики
+        members: { select: { user: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
         stages: { select: { code: true, status: true } },
         contracts: { where: { status: { not: "CANCELLED" } }, select: { signedAt: true, amount: true } },
       },
@@ -104,7 +105,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         {projects.length === 0 ? (
           <EmptyState title="Проектов нет" text={user.role === "CUSTOMER" ? "Проект появится после подписания договора по заявке." : "Измените фильтры поиска."} />
         ) : (
-          <Table head={["№", "Проект", "Заказчик", "Руководитель", "Готовность", "Срок", "Статус"]}>
+          <Table head={["№", "Проект", "Заказчик", "Проектировщики", "Готовность", "Срок", "Статус"]}>
             {projects.map((p, i) => (
               <Fragment key={p.id}>
                 {sort === "month" && p.month !== projects[i - 1]?.month && (
@@ -126,7 +127,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                     </Link>
                   </td>
                   <td>{p.customer.name}</td>
-                  <td>{p.manager?.name ?? "—"}</td>
+                  <td>{p.members.map((m) => m.user.name).join(", ") || <span className="text-muted">не назначены</span>}</td>
                   <td className="w-40">
                     <Progress value={projectProgress(p.stages.map((s) => ({ code: s.code as StageCodeT, status: s.status as StageStatusT })))} />
                   </td>
