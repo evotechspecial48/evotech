@@ -20,6 +20,7 @@ type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{
 export function InstallApp({ className }: { className?: string }) {
   const [evt, setEvt] = useState<InstallEvent | null>(null);
   const [ios, setIos] = useState(false);
+  const [android, setAndroid] = useState(false);
   const [installed, setInstalled] = useState(true);
   const [hint, setHint] = useState(false);
 
@@ -27,6 +28,7 @@ export function InstallApp({ className }: { className?: string }) {
     const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
     setInstalled(standalone);
     setIos(/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+    setAndroid(/android/i.test(navigator.userAgent));
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setEvt(e as InstallEvent);
@@ -40,21 +42,28 @@ export function InstallApp({ className }: { className?: string }) {
     };
   }, []);
 
-  if (installed || (!evt && !ios)) return null;
+  if (installed || (!evt && !ios && !android)) return null;
   return (
-    <div className={className}>
-      <button
-        type="button"
-        className={btnClass("secondary", "sm")}
-        onClick={async () => {
-          if (!evt) return setHint((v) => !v);
-          await evt.prompt();
-          if ((await evt.userChoice).outcome === "accepted") setInstalled(true);
-          setEvt(null);
-        }}
-      >
-        📲 Установить приложение
-      </button>
+    <div className={`space-y-2 ${className ?? ""}`}>
+      {android && (
+        <a href="/android/evotech.apk" download className={btnClass("primary", "sm")}>
+          🤖 Скачать приложение для Android (APK)
+        </a>
+      )}
+      {(evt || ios) && (
+        <button
+          type="button"
+          className={btnClass("secondary", "sm")}
+          onClick={async () => {
+            if (!evt) return setHint((v) => !v);
+            await evt.prompt();
+            if ((await evt.userChoice).outcome === "accepted") setInstalled(true);
+            setEvt(null);
+          }}
+        >
+          📲 Установить приложение
+        </button>
+      )}
       {hint && (
         <p className="mt-2 text-xs text-muted" role="status">
           В Safari нажмите «Поделиться» <span aria-hidden="true">⎋</span>, затем «На экран „Домой“» — кабинет откроется как приложение.

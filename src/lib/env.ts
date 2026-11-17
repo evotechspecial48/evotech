@@ -37,6 +37,8 @@ const schema = z.object({
   // Яндекс Метрика: номер счётчика (тот же, что в клиентском коде) и OAuth-токен с правом metrika:write — офлайн-конверсии
   NEXT_PUBLIC_YM_ID: z.string().optional(),
   YM_OAUTH_TOKEN: z.string().optional(),
+  // Отпечаток SHA-256 ключа подписи Android-приложения (assetlinks.json), через запятую — несколько ключей
+  ANDROID_CERT_SHA256: z.string().optional(),
   SBIS_PASSWORD: z.string().optional(),
   SBIS_API_URL: z.string().default("https://online.sbis.ru"),
 });
