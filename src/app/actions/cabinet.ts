@@ -644,6 +644,22 @@ export async function updateUserAction(_: ActionState, fd: FormData): Promise<Ac
   });
 }
 
+export async function resendInviteAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("users.manage");
+    const res = await users.resendInvite(user, str(fd, "userId"));
+    return { ok: true, message: `Приглашение отправлено на ${res.user.email}` };
+  });
+}
+
+export async function mergeAccountsAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const user = await actor("users.manage");
+    const res = await users.mergeAccounts(user, str(fd, "keepId"), str(fd, "duplicateId"));
+    return { ok: true, message: `Объединено: вход по ${res.email} теперь ведёт в основную учётную запись` };
+  });
+}
+
 export async function userStatusAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const user = await actor("users.manage");

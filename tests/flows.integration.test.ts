@@ -8,7 +8,7 @@ import { createLead, changeLeadStatus, createOffer, deleteLead, deleteOffer, upd
 import { acceptContract, createLeadContract, createSpecification, deleteContract, parentContractsForLead, requestContractOtp, uploadLeadContract } from "@/services/contracts";
 import { convertLeadToProject, createCustomerRequest, answerCustomerRequest, assignTeam, completeProject, setMemberPay } from "@/services/projects";
 import { createManualProject } from "@/services/customers";
-import { requestPasswordReset, resetPassword, updateUser } from "@/services/users";
+import { mergeAccounts, requestPasswordReset, resendInvite, resetPassword, updateUser } from "@/services/users";
 import { cancelInvoice, issueContractPayment, markPaidManually } from "@/services/invoices";
 import { sendContractToSbis, syncSbisContracts } from "@/services/edo";
 import { MockSbisClient, setSbisClient } from "@/lib/edo/sbis";
@@ -352,6 +352,29 @@ describe.skipIf(!enabled)("Сквозные сценарии", () => {
     } finally {
       setSbisClient(null);
     }
+  });
+
+  it("проектировщик из таблицы: приглашение на настоящую почту и объединение с самостоятельной регистрацией", async () => {
+    // Запись из таблицы с выдуманной почтой и историей (участие в проекте)
+    const imported = await user("designer-test-import@evotech.local", "DESIGNER", "Импортов");
+    await db.user.update({ where: { id: imported.id }, data: { status: "INVITED", passwordHash: null } });
+    await db.projectMember.create({ data: { projectId, userId: imported.id, fee: 30000 } });
+    await expect(resendInvite(director, imported.id)).rejects.toThrow(/настоящую почту/);
+    await expect(resendInvite(pm, imported.id)).rejects.toBeInstanceOf(ForbiddenError);
+
+    // Человек сам зарегистрировался на сайте — получилась пустая запись «Заказчик» с паролем
+    const selfReg = await user("real-designer@t.ru", "CUSTOMER", "Константин");
+    await expect(mergeAccounts(director, imported.id, imported.id)).rejects.toBeInstanceOf(UserError);
+    // Дубль с собственными данными не объединяется
+    await expect(mergeAccounts(director, imported.id, customer.id)).rejects.toThrow(/свои данные/);
+
+    await mergeAccounts(director, imported.id, selfReg.id);
+    const merged = await db.user.findUniqueOrThrow({ where: { id: imported.id }, include: { memberships: true } });
+    expect(merged).toMatchObject({ email: "real-designer@t.ru", role: "DESIGNER", status: "ACTIVE", name: "Импортов" });
+    expect(merged.passwordHash).not.toBeNull();
+    expect(merged.memberships.map((m) => m.fee)).toEqual([30000]); // история и оплата сохранены
+    expect(await db.user.findUnique({ where: { id: selfReg.id } })).toBeNull();
+    await db.projectMember.deleteMany({ where: { userId: imported.id } }); // не влияем на расчёты других тестов
   });
 
   it("директор меняет почту (логин) сотрудника: проверка формата и занятости, сброс подтверждения", async () => {

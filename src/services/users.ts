@@ -215,6 +215,64 @@ export async function updateUser(actor: SessionUser, userId: string, data: { nam
   });
 }
 
+/** Выдуманные адреса импорта из таблицы учёта (designer-…@evotech.local) — на них письма не уходят. */
+export const isPlaceholderEmail = (email: string) => /@evotech\.local$/i.test(email);
+
+/** Повторное приглашение сотрудника или заказчика, ещё не задавшего пароль: письмо со ссылкой на текущую почту записи. */
+export async function resendInvite(actor: SessionUser, userId: string) {
+  if (actor.role !== "DIRECTOR") throw new ForbiddenError();
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundError("Пользователь");
+  if (user.status !== "INVITED") throw new UserError("Пользователь уже задал пароль — для входа он использует «Забыли пароль?»");
+  if (isPlaceholderEmail(user.email)) throw new UserError("Сначала укажите настоящую почту пользователя (кнопка «Изменить» → поле почты)");
+  return inviteUser(actor, { email: user.email, name: user.name, role: user.role });
+}
+
+/**
+ * Объединение дубля с основной учётной записью: человек зарегистрировался сам (новая запись, обычно «Заказчик»),
+ * а его история — проекты, оплаты — у записи, импортированной из таблицы. Вход дубля (почта, пароль, подтверждение)
+ * переносится в основную запись, дубль удаляется. Роль, имя и история основной записи не меняются.
+ * Дубль с собственными данными (проекты, заявки, файлы…) не объединяется — иначе данные потерялись бы.
+ */
+export async function mergeAccounts(actor: SessionUser, keepId: string, duplicateId: string) {
+  if (actor.role !== "DIRECTOR") throw new ForbiddenError();
+  if (keepId === duplicateId) throw new UserError("Выберите две разные учётные записи");
+  if (duplicateId === actor.id) throw new UserError("Нельзя удалить собственную учётную запись");
+  const [keep, dup] = await Promise.all([db.user.findUnique({ where: { id: keepId } }), db.user.findUnique({ where: { id: duplicateId } })]);
+  if (!keep || !dup) throw new NotFoundError("Пользователь");
+  if (keep.anonymizedAt || dup.anonymizedAt) throw new UserError("Обезличенные записи не объединяются");
+  const c = await db.user.findUniqueOrThrow({
+    where: { id: duplicateId },
+    select: {
+      _count: { select: { managedLeads: true, customerLeads: true, customerProjects: true, managedProjects: true, salesProjects: true, memberships: true, comments: true, quickOrders: true, assignedStages: true, tasks: true } },
+    },
+  });
+  const [contracts, acceptances, files] = await Promise.all([
+    db.contract.count({ where: { customerId: duplicateId } }),
+    db.contractAcceptance.count({ where: { userId: duplicateId } }),
+    db.fileAsset.count({ where: { uploadedById: duplicateId } }),
+  ]);
+  const busy = Object.values(c._count).reduce((s, n) => s + n, 0) + contracts + acceptances + files;
+  if (busy) throw new UserError(`У дубля ${dup.email} есть свои данные (${busy}) — объединение удалило бы их. Напишите разработчику.`);
+
+  await db.$transaction(async (tx) => {
+    await tx.user.delete({ where: { id: duplicateId } }); // сессии, токены и уведомления дубля удаляются каскадом
+    await tx.user.update({
+      where: { id: keepId },
+      data: {
+        email: dup.email,
+        passwordHash: dup.passwordHash ?? keep.passwordHash,
+        emailVerifiedAt: dup.emailVerifiedAt ?? keep.emailVerifiedAt,
+        status: dup.passwordHash && keep.status !== "BLOCKED" ? "ACTIVE" : keep.status,
+        phone: keep.phone ?? dup.phone,
+        lastLoginAt: dup.lastLoginAt ?? keep.lastLoginAt,
+      },
+    });
+  });
+  await audit({ actorId: actor.id, action: "user.update", entityType: "User", entityId: keepId, meta: { merged: { from: dup.email, duplicateRole: dup.role, previousEmail: keep.email } } });
+  return { email: dup.email };
+}
+
 /** Экспорт персональных данных пользователя (по запросу субъекта ПДн). */
 export async function exportPersonalData(actor: SessionUser, userId: string) {
   if (actor.id !== userId && actor.role !== "DIRECTOR") throw new ForbiddenError();
